@@ -9,6 +9,7 @@ use gaise_client::ServiceAccount;
 use std::io::{self, Write};
 use std::process::Command;
 use std::fs;
+use std::path::{Path, PathBuf};
 use dialoguer::Confirm;
 use anyhow::{Result, anyhow};
 use colored::*;
@@ -61,6 +62,7 @@ struct App {
     brave: bool,
     system_prompt: String,
     session_cache_key: String,
+    working_directory: PathBuf,
 }
 
 impl App {
@@ -122,6 +124,8 @@ impl App {
             }
         }
 
+        let working_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+
         Ok(Self {
             client: Box::new(client),
             history: vec![GaiseMessage {
@@ -135,6 +139,7 @@ impl App {
             brave,
             system_prompt,
             session_cache_key: Uuid::new_v4().to_string(),
+            working_directory,
         })
     }
 
@@ -142,14 +147,34 @@ impl App {
         let wd = std::env::current_dir().unwrap_or_default().to_string_lossy().to_string();
         let platform = std::env::consts::OS;
         let os_version = "Unknown";
-        let today = "2024-02-08"; // Simplified for now
-        let is_git = std::path::Path::new(".git").exists();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let is_git = Path::new(".git").exists();
 
         raw.replace("__WORKING_DIRECTORY__", &wd)
            .replace("__PLATFORM__", platform)
            .replace("__OS_VERSION__", os_version)
-           .replace("__TODAY_DATE__", today)
+           .replace("__TODAY_DATE__", &today)
            .replace("__IS_GIT_REPO__", if is_git { "Yes" } else { "No" })
+    }
+
+    fn validate_path(&self, path: &str) -> Result<PathBuf> {
+        let requested_path = Path::new(path);
+        let canonical_path = if requested_path.is_absolute() {
+            requested_path.canonicalize().unwrap_or_else(|_| requested_path.to_path_buf())
+        } else {
+            self.working_directory.join(requested_path)
+                .canonicalize()
+                .unwrap_or_else(|_| self.working_directory.join(requested_path))
+        };
+
+        if !canonical_path.starts_with(&self.working_directory) {
+            return Err(anyhow!(
+                "Path '{}' is outside the working directory. For security reasons, file operations are restricted to the working directory and its subdirectories.",
+                path
+            ));
+        }
+
+        Ok(canonical_path)
     }
 
 
@@ -390,9 +415,15 @@ impl App {
                 let args_str = arguments.as_deref().unwrap_or("{}");
                 let args: ReadFileArgs = serde_json::from_str(args_str)?;
                 println!("{} Reading file: {}", "📖".bright_cyan(), args.path.bold().bright_cyan());
-                match fs::read_to_string(&args.path) {
-                    Ok(content) => Ok(content),
-                    Err(e) => Ok(format!("Error reading file: {}", e)),
+
+                match self.validate_path(&args.path) {
+                    Ok(validated_path) => {
+                        match fs::read_to_string(&validated_path) {
+                            Ok(content) => Ok(content),
+                            Err(e) => Ok(format!("Error reading file: {}", e)),
+                        }
+                    }
+                    Err(e) => Ok(format!("Error: {}", e)),
                 }
             }
             "edit_file" => {
@@ -400,16 +431,21 @@ impl App {
                 let args: EditFileArgs = serde_json::from_str(args_str)?;
                 println!("{} Editing file: {}", "✍️".bright_yellow(), args.path.bold().bright_yellow());
 
-                if !self.brave {
-                    let prompt = format!("{} Edit file {}?", "❓".bright_yellow(), args.path.bold().cyan());
-                    if !Confirm::new().with_prompt(prompt).interact()? {
-                        return Ok("File edit cancelled by user.".to_string());
-                    }
-                }
+                match self.validate_path(&args.path) {
+                    Ok(validated_path) => {
+                        if !self.brave {
+                            let prompt = format!("{} Edit file {}?", "❓".bright_yellow(), args.path.bold().cyan());
+                            if !Confirm::new().with_prompt(prompt).interact()? {
+                                return Ok("File edit cancelled by user.".to_string());
+                            }
+                        }
 
-                match fs::write(&args.path, &args.content) {
-                    Ok(_) => Ok("File updated successfully.".to_string()),
-                    Err(e) => Ok(format!("Error writing file: {}", e)),
+                        match fs::write(&validated_path, &args.content) {
+                            Ok(_) => Ok("File updated successfully.".to_string()),
+                            Err(e) => Ok(format!("Error writing file: {}", e)),
+                        }
+                    }
+                    Err(e) => Ok(format!("Error: {}", e)),
                 }
             }
             _ => Ok(format!("Unknown tool: {}", name)),
