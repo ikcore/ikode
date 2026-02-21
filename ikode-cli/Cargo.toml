@@ -1,7 +1,7 @@
 [package]
 name = "ikode-cli"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 default-run = "ikode"
 
 [[bin]]
@@ -22,3 +22,7 @@ anyhow = "1.0"
 uuid = { version = "1.0", features = ["v4"] }
 colored = "2.1"
 indicatif = "0.17"
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3.8"
