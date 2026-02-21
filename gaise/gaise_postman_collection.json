@@ -1,0 +1,190 @@
+{
+	"info": {
+		"_postman_id": "8d8f6385-2e6a-4b6e-8d51-4e78c8d8c2c8",
+		"name": "GAISe API",
+		"description": "GAISe (Generative AI Service) is an abstraction service that provides a standardized API for multiple Generative AI providers (OpenAI, VertexAI, Ollama).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Instruct",
+			"item": [
+				{
+					"name": "Simple Instruct",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::llama3\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue?\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Multi-Turn Conversation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::llama3\",\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": { \"type\": \"text\", \"text\": \"Hello!\" }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": { \"type\": \"text\", \"text\": \"Hi there! How can I help you today?\" }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": { \"type\": \"text\", \"text\": \"Tell me a joke.\" }\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Tool Handling",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::llama3\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather in a given location\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"The city and state, e.g. San Francisco, CA\"\n          },\n          \"unit\": {\n            \"type\": \"string\",\n            \"enum\": [\"celsius\", \"fahrenheit\"]\n          }\n        },\n        \"required\": [\"location\"]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": { \"type\": \"text\", \"text\": \"What's the weather like in London?\" }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Instruct (Streaming)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::llama3\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue?\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct",
+								"stream"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Embeddings",
+			"item": [
+				{
+					"name": "Single Embedding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::all-minilm\",\n  \"input\": \"The quick brown fox jumps over the lazy dog.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Multi Embedding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"ollama::all-minilm\",\n  \"input\": [\n    \"First sentence to embed.\",\n    \"Second sentence to embed.\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

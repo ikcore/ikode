@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "ikode-cli",
+    "gaise/gaise-core",
+    "gaise/gaise-client",
+    "gaise/gaise-provider-ollama",
+    "gaise/gaise-provider-openai",
+    "gaise/gaise-provider-vertexai",
+    "gaise/gaise-provider-bedrock",
+]
+
+default-members = ["ikode-cli"]

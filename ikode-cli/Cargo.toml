@@ -1,0 +1,24 @@
+[package]
+name = "ikode-cli"
+version = "0.1.0"
+edition = "2024"
+default-run = "ikode"
+
+[[bin]]
+name = "ikode"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "color"] }
+tokio = { version = "1.0", features = ["full"] }
+gaise-core = { path = "../gaise/gaise-core" }
+gaise-client = { path = "../gaise/gaise-client" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures-util = "0.3"
+dialoguer = "0.11"
+async-trait = "0.1"
+anyhow = "1.0"
+uuid = { version = "1.0", features = ["v4"] }
+colored = "2.1"
+indicatif = "0.17"

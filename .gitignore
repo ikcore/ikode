@@ -1,0 +1,17 @@
+# Rust
+/target
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Junie
+.junie/
+
+# Other
+.output.txt
