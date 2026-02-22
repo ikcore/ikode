@@ -119,7 +119,7 @@ fn test_mapping_text_request() {
 
     assert_eq!(ollama_request.messages.len(), 1);
     assert_eq!(ollama_request.messages[0].role, "user");
-    assert_eq!(ollama_request.messages[0].content, "Hello");
+    assert_eq!(ollama_request.messages[0].content, Some(String::from("Hello")));
     
     let options = ollama_request.options.expect("Missing options");
     assert_eq!(options.temperature, Some(0.7));
@@ -144,7 +144,7 @@ fn test_mapping_multimodal_request() {
     let ollama_request = OllamaChatRequest::from(&request);
 
     assert_eq!(ollama_request.messages.len(), 1);
-    assert_eq!(ollama_request.messages[0].content, "What is in this image?");
+    assert_eq!(ollama_request.messages[0].content, Some("What is in this image?".to_string()));
     
     let images = ollama_request.messages[0].images.as_ref().expect("Missing images");
     assert_eq!(images.len(), 1);
