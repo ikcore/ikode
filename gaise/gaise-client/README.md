@@ -1,6 +1,6 @@
 # gaise-client
 
-`gaise-client` is a provider aggregator for the GAISe (Generative AI Service) project. It allows you to use multiple AI providers (OpenAI, VertexAI, Ollama) through a single interface, routing requests based on a model naming convention.
+`gaise-client` is a provider aggregator for the GAISe (Generative AI Service) project. It allows you to use multiple AI providers (OpenAI, VertexAI, Ollama, Bedrock, Anthropic) through a single interface, routing requests based on a model naming convention.
 
 ## Features
 
@@ -17,6 +17,8 @@
 - `openai`: Enables the OpenAI provider.
 - `vertexai`: Enables the Google VertexAI provider.
 - `ollama`: Enables the Ollama provider.
+- `bedrock`: Enables the AWS Bedrock provider.
+- `anthropic`: Enables the Anthropic Claude provider.
 
 To use only specific providers, disable default features in your `Cargo.toml`:
 
@@ -30,6 +32,8 @@ gaise-client = { version = "0.1.0", default-features = false, features = ["opena
 - `openai`
 - `vertexai`
 - `ollama`
+- `bedrock`
+- `anthropic`
 
 ## Usage
 
@@ -43,6 +47,8 @@ use gaise_client::{GaiseClientConfig, GaiseClientService};
 let config = GaiseClientConfig {
     #[cfg(feature = "openai")]
     openai_api_key: Some("your-openai-key".to_string()),
+    #[cfg(feature = "anthropic")]
+    anthropic_api_key: Some("your-anthropic-key".to_string()),
     #[cfg(feature = "ollama")]
     ollama_url: Some("http://localhost:11434".to_string()),
     ..Default::default()
@@ -84,3 +90,21 @@ The `GaiseClientService` parses the `model` string to identify the provider.
 If you request `ollama::llama3`, the service will:
 1. Initialize (or retrieve) the Ollama client.
 2. Call the Ollama client with `model: "llama3"`.
+
+### Example with Anthropic
+
+```rust
+let request = GaiseInstructRequest {
+    model: "anthropic::claude-3-5-sonnet-20241022".to_string(),
+    input: OneOrMany::One(GaiseMessage {
+        role: "user".to_owned(),
+        content: Some(OneOrMany::One(GaiseContent::Text {
+            text: "Hello, Claude!".to_owned()
+        })),
+        ..Default::default()
+    }),
+    ..Default::default()
+};
+
+let response = service.instruct(&request).await?;
+```

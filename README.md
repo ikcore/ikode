@@ -18,10 +18,11 @@ Written by: Ian Knowles
 ## iKode CLI Features
 
 - 🤖 **Multi-Model Support**: Use OpenAI (GPT-4o, etc.), Anthropic (Claude), Ollama, Vertex AI, or Bedrock.
-- 📁 **File Operations**: The agent can read and edit files in your workspace.
+- 📁 **File Operations**: Read files with line numbers and line ranges, edit files with surgical search-and-replace, create new files.
 - 🐚 **Command Execution**: Run shell commands with optional user confirmation.
 - 📝 **Todo Management**: Built-in todo list to keep track of agent goals.
 - 📚 **Context Aware**: Automatically includes OS information, working directory, and user guidelines in the system prompt.
+- ⚡ **Token Efficient**: Patch-based edits, file read caps (2000 lines / 10 MB), and cache-friendly history truncation keep costs low.
 
 ## Installation
 
@@ -43,7 +44,11 @@ During the interactive session, you can use the following commands:
 - `/help`: Display a list of available commands and their descriptions.
 - `/model`: Display the current model being used.
 - `/model {model_name}`: Switch to a different model (e.g., `/model ollama::llama3`).
+- `/history`: Show history truncation settings and message count.
+- `/max-history {n}`: Set max history messages per request (0 = unlimited).
+- `/prefix-keep {n}`: Set number of early messages to always keep for cache stability.
 - `/clear`: Reset the conversation history.
+- `/cls`: Clear the terminal screen.
 - `/exit`: Quit the interactive session.
 
 ### Direct Prompt
@@ -99,7 +104,16 @@ export VERTEXAI_SA_PATH="/path/to/service-account.json"
 export AWS_REGION="us-east-1"
 ```
 
-Use the `--brave` flag to allow the agent to execute commands and edit files without asking for confirmation (use with caution!).
+### Options
+
+```bash
+# Brave mode - skip confirmation prompts (use with caution!)
+ikode --brave
+
+# Control history truncation
+ikode --max-history 120        # Max messages per request (default: 80, 0 = unlimited)
+ikode --prefix-keep 6          # Early messages to always keep (default: 4)
+```
 
 ## Contributing
 

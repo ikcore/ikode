@@ -46,6 +46,12 @@ struct Args {
 
     #[arg(short, long, help = "Path to a guide file")]
     guide: Option<String>,
+
+    #[arg(long, default_value_t = 80, help = "Maximum number of history messages sent per request")]
+    max_history: usize,
+
+    #[arg(long, default_value_t = 4, help = "Number of early messages to always keep for cache stability")]
+    prefix_keep: usize,
 }
 
 struct Todo {
@@ -63,10 +69,12 @@ struct App {
     system_prompt: String,
     session_cache_key: String,
     working_directory: PathBuf,
+    max_history: usize,
+    prefix_keep: usize,
 }
 
 impl App {
-    fn new(model: String, brave: bool, guide_path: Option<String>) -> Result<Self> {
+    fn new(model: String, brave: bool, guide_path: Option<String>, max_history: usize, prefix_keep: usize) -> Result<Self> {
         let mut config = GaiseClientConfig::default();
 
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
@@ -140,6 +148,8 @@ impl App {
             system_prompt,
             session_cache_key: Uuid::new_v4().to_string(),
             working_directory,
+            max_history,
+            prefix_keep,
         })
     }
 
@@ -155,6 +165,44 @@ impl App {
            .replace("__OS_VERSION__", os_version)
            .replace("__TODAY_DATE__", &today)
            .replace("__IS_GIT_REPO__", if is_git { "Yes" } else { "No" })
+    }
+
+    fn build_request_history(&self) -> Vec<GaiseMessage> {
+        if self.max_history == 0 {
+            return self.history.clone();
+        }
+
+        let total = self.history.len();
+        if total <= self.max_history {
+            return self.history.clone();
+        }
+
+        let mut result = Vec::with_capacity(self.max_history);
+
+        let prefix_end = (1 + self.prefix_keep).min(total);
+        result.extend_from_slice(&self.history[..prefix_end]);
+
+        let tail_count = self.max_history.saturating_sub(prefix_end);
+        let tail_start = total.saturating_sub(tail_count);
+
+        if tail_start > prefix_end {
+            result.push(GaiseMessage {
+                role: "system".to_string(),
+                content: Some(OneOrMany::One(GaiseContent::Text {
+                    text: format!(
+                        "[Note: {} earlier messages were truncated to save context. The conversation continues below.]",
+                        tail_start - prefix_end
+                    ),
+                })),
+                tool_calls: None,
+                tool_call_id: None,
+            });
+        }
+
+        let actual_tail_start = tail_start.max(prefix_end);
+        result.extend_from_slice(&self.history[actual_tail_start..]);
+
+        result
     }
 
     fn validate_path(&self, path: &str) -> Result<PathBuf> {
@@ -210,6 +258,9 @@ impl App {
                 println!("  {} - Display this help message", "/help".cyan());
                 println!("  {} - Display the current model", "/model".cyan());
                 println!("  {} {{model}} - Switch to a different model", "/model".cyan());
+                println!("  {} - Show history settings and stats", "/history".cyan());
+                println!("  {} {{n}} - Set max history messages (0 = unlimited)", "/max-history".cyan());
+                println!("  {} {{n}} - Set number of prefix messages to always keep", "/prefix-keep".cyan());
                 println!("  {} - Reset the conversation history", "/clear".cyan());
                 println!("  {} - Clear the terminal screen", "/cls".cyan());
                 println!("  {} - Quit the interactive session\n", "/exit".cyan());
@@ -245,6 +296,42 @@ impl App {
                 continue;
             }
 
+            if input == "/history" {
+                let limit_display = if self.max_history == 0 {
+                    "unlimited".to_string()
+                } else {
+                    self.max_history.to_string()
+                };
+                println!("{} History settings:", "📊".bright_blue());
+                println!("  Max messages per request: {}", limit_display.bright_magenta().bold());
+                println!("  Prefix keep:              {}", self.prefix_keep.to_string().bright_magenta().bold());
+                println!("  Total messages stored:    {}", self.history.len().to_string().bright_magenta().bold());
+                continue;
+            }
+            if input.starts_with("/max-history ") {
+                let value = input.trim_start_matches("/max-history ").trim();
+                match value.parse::<usize>() {
+                    Ok(n) => {
+                        self.max_history = n;
+                        let display = if n == 0 { "unlimited".to_string() } else { n.to_string() };
+                        println!("{} Max history set to: {}", "✅".bright_green(), display.bright_magenta().bold());
+                    }
+                    Err(_) => println!("{} Invalid number. Usage: /max-history {{number}}", "⚠️".bright_yellow()),
+                }
+                continue;
+            }
+            if input.starts_with("/prefix-keep ") {
+                let value = input.trim_start_matches("/prefix-keep ").trim();
+                match value.parse::<usize>() {
+                    Ok(n) => {
+                        self.prefix_keep = n;
+                        println!("{} Prefix keep set to: {}", "✅".bright_green(), n.to_string().bright_magenta().bold());
+                    }
+                    Err(_) => println!("{} Invalid number. Usage: /prefix-keep {{number}}", "⚠️".bright_yellow()),
+                }
+                continue;
+            }
+
             self.process_prompt(input).await?;
         }
         Ok(())
@@ -268,7 +355,7 @@ impl App {
             }
 
             let request = GaiseInstructRequest {
-                input: OneOrMany::Many(self.history.clone()),
+                input: OneOrMany::Many(self.build_request_history()),
                 model: self.model.clone(),
                 tools: Some(tools::get_tools()),
                 generation_config,
@@ -418,10 +505,49 @@ impl App {
 
                 match self.validate_path(&args.path) {
                     Ok(validated_path) => {
-                        match fs::read_to_string(&validated_path) {
-                            Ok(content) => Ok(content),
-                            Err(e) => Ok(format!("Error reading file: {}", e)),
+                        let metadata = match fs::metadata(&validated_path) {
+                            Ok(m) => m,
+                            Err(e) => return Ok(format!("Error reading file: {}", e)),
+                        };
+
+                        const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
+                        if metadata.len() > MAX_FILE_SIZE {
+                            return Ok(format!(
+                                "Error: file is too large ({:.1} MB). Maximum supported size is {:.0} MB.",
+                                metadata.len() as f64 / (1024.0 * 1024.0),
+                                MAX_FILE_SIZE as f64 / (1024.0 * 1024.0)
+                            ));
                         }
+
+                        let content = match fs::read_to_string(&validated_path) {
+                            Ok(c) => c,
+                            Err(e) => return Ok(format!("Error reading file: {}", e)),
+                        };
+
+                        let total_lines = content.lines().count();
+                        let offset = args.offset.unwrap_or(1).max(1);
+                        let limit = args.limit.unwrap_or(2000);
+
+                        let selected: Vec<String> = content
+                            .lines()
+                            .enumerate()
+                            .skip(offset - 1)
+                            .take(limit)
+                            .map(|(i, line)| format!("{:>6}\t{}", i + 1, line))
+                            .collect();
+
+                        let mut result = selected.join("\n");
+
+                        let last_shown = (offset - 1 + selected.len()).min(total_lines);
+                        if last_shown < total_lines {
+                            result.push_str(&format!(
+                                "\n\n... ({} more lines not shown. Use offset={} to continue reading.)",
+                                total_lines - last_shown,
+                                last_shown + 1
+                            ));
+                        }
+
+                        Ok(result)
                     }
                     Err(e) => Ok(format!("Error: {}", e)),
                 }
@@ -433,6 +559,19 @@ impl App {
 
                 match self.validate_path(&args.path) {
                     Ok(validated_path) => {
+                        let content = match fs::read_to_string(&validated_path) {
+                            Ok(c) => c,
+                            Err(e) => return Ok(format!("Error reading file: {}", e)),
+                        };
+
+                        let count = content.matches(&args.old_text).count();
+                        if count == 0 {
+                            return Ok("Error: old_text not found in file. Make sure it matches exactly, including whitespace and indentation.".to_string());
+                        }
+                        if count > 1 {
+                            return Ok(format!("Error: old_text matches {} locations in the file. Provide more surrounding context to make the match unique.", count));
+                        }
+
                         if !self.brave {
                             let prompt = format!("{} Edit file {}?", "❓".bright_yellow(), args.path.bold().cyan());
                             if !Confirm::new().with_prompt(prompt).interact()? {
@@ -440,9 +579,44 @@ impl App {
                             }
                         }
 
-                        match fs::write(&validated_path, &args.content) {
+                        let new_content = content.replacen(&args.old_text, &args.new_text, 1);
+                        match fs::write(&validated_path, &new_content) {
                             Ok(_) => Ok("File updated successfully.".to_string()),
                             Err(e) => Ok(format!("Error writing file: {}", e)),
+                        }
+                    }
+                    Err(e) => Ok(format!("Error: {}", e)),
+                }
+            }
+            "create_file" => {
+                let args_str = arguments.as_deref().unwrap_or("{}");
+                let args: CreateFileArgs = serde_json::from_str(args_str)?;
+                println!("{} Creating file: {}", "📄".bright_green(), args.path.bold().bright_green());
+
+                match self.validate_path(&args.path) {
+                    Ok(validated_path) => {
+                        if validated_path.exists() {
+                            return Ok(format!("Error: file '{}' already exists. Use edit_file to modify existing files.", args.path));
+                        }
+
+                        if !self.brave {
+                            let prompt = format!("{} Create file {}?", "❓".bright_yellow(), args.path.bold().cyan());
+                            if !Confirm::new().with_prompt(prompt).interact()? {
+                                return Ok("File creation cancelled by user.".to_string());
+                            }
+                        }
+
+                        if let Some(parent) = validated_path.parent() {
+                            if !parent.exists() {
+                                if let Err(e) = fs::create_dir_all(parent) {
+                                    return Ok(format!("Error creating directories: {}", e));
+                                }
+                            }
+                        }
+
+                        match fs::write(&validated_path, &args.content) {
+                            Ok(_) => Ok("File created successfully.".to_string()),
+                            Err(e) => Ok(format!("Error creating file: {}", e)),
                         }
                     }
                     Err(e) => Ok(format!("Error: {}", e)),
@@ -473,7 +647,7 @@ async fn main() -> Result<()> {
         .collect();
 
     let args = Args::parse_from(args);
-    let mut app = App::new(args.model, args.brave, args.guide)?;
+    let mut app = App::new(args.model, args.brave, args.guide, args.max_history, args.prefix_keep)?;
 
     if let Some(prompt) = args.prompt {
         app.process_prompt(&prompt).await?;
