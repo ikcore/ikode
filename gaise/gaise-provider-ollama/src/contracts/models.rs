@@ -17,7 +17,8 @@ pub struct OllamaChatRequest {
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct OllamaMessage {
     pub role: String,
-    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
