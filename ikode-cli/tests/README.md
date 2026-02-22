@@ -20,13 +20,28 @@ Tests for path security and validation:
 
 ### `tool_tests.rs`
 Tests for file operation tools:
-- Read file operations (success, not found, empty, large files)
+- Read file operations (success, not found, empty, large files, line numbers, offset/limit, size cap)
+- Search-and-replace edit operations (exact match, not found, ambiguous match, multiline, preservation)
 - Write file operations (create, overwrite, unicode)
+- History truncation (prefix preservation, recent messages, truncation notice, max size, small history passthrough)
 - Nested directory handling
 - Edge cases (multiline, unicode, 1MB+ files)
 
 **Key Tests:**
 - ✅ `test_read_file_success` - Basic read operations
+- ✅ `test_read_file_with_line_numbers` - Line number output format
+- ✅ `test_read_file_with_offset_and_limit` - Line range support
+- ✅ `test_read_file_truncation_message` - Default 2000-line cap
+- ✅ `test_read_file_size_cap` - 10 MB file size rejection
+- ✅ `test_edit_file_search_replace` - Patch-based editing
+- ✅ `test_edit_file_old_text_not_found` - Error on missing text
+- ✅ `test_edit_file_ambiguous_match` - Error on multiple matches
+- ✅ `test_edit_file_multiline_replacement` - Multi-line edits
+- ✅ `test_edit_file_preserves_rest_of_file` - Non-targeted content unchanged
+- ✅ `test_history_truncation_preserves_prefix` - System prompt + early messages kept
+- ✅ `test_history_truncation_keeps_recent_messages` - Recent tail preserved
+- ✅ `test_history_truncation_inserts_notice` - Truncation notice added
+- ✅ `test_history_truncation_respects_max_size` - Max size enforced
 - ✅ `test_write_file_overwrites_existing` - Overwrite behavior
 - ✅ `test_write_unicode_content` - Unicode support
 - ✅ `test_read_large_file` - Performance with large files
@@ -103,13 +118,17 @@ cargo test -- --test-threads=4
 
 ### Functionality Tests
 - ✅ File read/write operations
+- ✅ File read with line numbers, offset, limit
+- ✅ File size cap (10 MB)
+- ✅ Search-and-replace editing (exact match, ambiguous, not found)
+- ✅ History truncation (prefix, tail, notice, max size)
 - ✅ Todo management
 - ✅ CLI argument parsing
 - ✅ JSON tool argument parsing
 - ✅ Date formatting
 
 ### Integration Tests
-- ✅ CLI flags
+- ✅ CLI flags (including `--max-history`, `--prefix-keep`)
 - ✅ System prompt generation
 - ✅ Environment detection
 - ✅ Command execution
@@ -120,7 +139,6 @@ cargo test -- --test-threads=4
 - [ ] Mock LLM responses for full end-to-end tests
 - [ ] Command timeout tests
 - [ ] Brave mode security tests
-- [ ] Conversation history management tests
 - [ ] Tool call parsing error handling
 
 ### Medium Priority
@@ -133,7 +151,6 @@ cargo test -- --test-threads=4
 ### Low Priority
 - [ ] UI/UX tests (spinner, colors)
 - [ ] Platform-specific tests
-- [ ] Large conversation history tests
 - [ ] Memory leak tests
 
 ## Contributing Tests

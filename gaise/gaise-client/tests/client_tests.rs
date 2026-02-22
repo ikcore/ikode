@@ -30,9 +30,7 @@ async fn test_instruct_delegation_parsing() {
     let request = GaiseInstructRequest {
         model: "ollama::llama3".to_string(),
         input: gaise_core::contracts::OneOrMany::Many(vec![]),
-        generation_config: None,
-        tools: None,
-        tool_config: None,
+        ..Default::default()
     };
 
     // We can't easily mock the underlying clients without changing their traits or using a mock library
@@ -54,6 +52,7 @@ async fn test_embeddings_delegation_parsing() {
     let request = gaise_core::contracts::GaiseEmbeddingsRequest {
         model: "openai::text-embedding-3-small".to_string(),
         input: gaise_core::contracts::OneOrMany::One("hello".to_string()),
+        ..Default::default()
     };
 
     let result = service.embeddings(&request).await;

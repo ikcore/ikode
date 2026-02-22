@@ -1,6 +1,6 @@
 # GAISe API Documentation
 
-GAISe (Generative AI Service) is an abstraction service that provides a standardized API for multiple Generative AI providers (OpenAI, VertexAI, Ollama).
+GAISe (Generative AI Service) is an abstraction service that provides a standardized API for multiple Generative AI providers (OpenAI, VertexAI, Ollama, Bedrock, Anthropic).
 
 ## Base URL
 
@@ -14,6 +14,9 @@ All requests require a `model` field. The format for the model name is:
 Examples:
 - `ollama::llama3`
 - `vertexai::gemini-1.5-flash`
+- `openai::gpt-4o`
+- `anthropic::claude-3-5-sonnet-20241022`
+- `bedrock::amazon.titan-text-express-v1`
 
 ## Endpoints
 
@@ -232,6 +235,10 @@ The API server is configured via environment variables:
 | `OLLAMA_URL` | The URL of the Ollama service | `http://localhost:11434` |
 | `VERTEXAI_API_URL` | The URL of the Vertex AI API | (empty) |
 | `VERTEXAI_SA_PATH` | Path to the Google Cloud Service Account JSON file | (none) |
+| `OPENAI_API_KEY` | OpenAI API key | (none) |
+| `OPENAI_API_URL` | OpenAI API URL | `https://api.openai.com/v1` |
+| `ANTHROPIC_API_KEY` | Anthropic API key | (none) |
+| `ANTHROPIC_API_URL` | Anthropic API URL | `https://api.anthropic.com/v1` |
 
 ---
 

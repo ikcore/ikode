@@ -5,9 +5,7 @@ edition = "2024"
 
 [dependencies]
 gaise-core = { path = "../gaise-core" }
-gaise-provider-ollama = { path = "../gaise-provider-ollama" }
-gaise-provider-vertexai = { path = "../gaise-provider-vertexai" }
-gaise-provider-openai = { path = "../gaise-provider-openai" }
+gaise-client = { path = "../gaise-client" }
 
 axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }

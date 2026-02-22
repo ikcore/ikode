@@ -40,9 +40,14 @@ ikode
 ### 1. Interactive Mode (Default)
 Running `ikode` without arguments starts an interactive session.
 - Type your requests in plain English.
+- Use `/help` to see all available commands.
 - Use `/model` to output the current model.
 - Use `/model { model_name }` to change the model.
+- Use `/history` to view history settings and message count.
+- Use `/max-history { n }` to change the max history messages sent per request (0 = unlimited).
+- Use `/prefix-keep { n }` to change how many early messages are always kept for cache stability.
 - Use `/clear` to reset the conversation history.
+- Use `/cls` to clear the terminal screen.
 - Use `/exit` to leave the session.
 
 ### 2. Direct Prompt Mode
@@ -55,7 +60,7 @@ ikode --prompt "Check if there are any TODOs in src/main.rs"
 
 iKode is not just a chatbot; it's an agent capable of performing actions:
 
-- **File Operations**: It can `read_file` to understand your code and `edit_file` to apply changes or refactorings.
+- **File Operations**: It can `read_file` to understand your code (with line numbers, line ranges, and a 2000-line default cap), `edit_file` to apply surgical search-and-replace changes, and `create_file` to write new files.
 - **Command Execution**: It can `execute_command` to run tests, build your project, or list directory contents.
 - **Todo Management**: It maintains an internal todo list. You can ask it to "Add a task to my todo list" or "Show my todos". It uses this list to track its own progress on complex tasks.
 
@@ -79,6 +84,19 @@ ikode --model "ollama::llama3"
 ikode --model "openai::gpt-4-turbo"
 ```
 *Default model is `openai::gpt-4o`.*
+
+### History & Token Controls
+iKode uses a cache-friendly history truncation strategy to keep token usage efficient during long sessions. You can tune this at startup:
+
+```bash
+# Set max history messages per request (default: 80, 0 = unlimited)
+ikode --max-history 120
+
+# Set number of early messages to always keep for cache stability (default: 4)
+ikode --prefix-keep 6
+```
+
+These can also be changed at runtime using `/max-history` and `/prefix-keep` commands. Use `/history` to see current settings.
 
 ## User Guidelines
 
