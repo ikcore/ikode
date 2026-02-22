@@ -13,11 +13,11 @@ Written by: Ian Knowles
 - **`gaise/`**: Generative AI Service (GAISe) - a unified interface for AI providers:
     - `gaise-core`: Shared traits and contracts.
     - `gaise-client`: Easy-to-use client for interacting with GAISe.
-    - `gaise-provider-*`: Implementations for OpenAI, Ollama, Vertex AI, and AWS Bedrock.
+    - `gaise-provider-*`: Implementations for OpenAI, Anthropic, Ollama, Vertex AI, and AWS Bedrock.
 
 ## iKode CLI Features
 
-- 🤖 **Multi-Model Support**: Use OpenAI (GPT-4o, etc.), Ollama, Vertex AI, or Bedrock.
+- 🤖 **Multi-Model Support**: Use OpenAI (GPT-4o, etc.), Anthropic (Claude), Ollama, Vertex AI, or Bedrock.
 - 📁 **File Operations**: The agent can read and edit files in your workspace.
 - 🐚 **Command Execution**: Run shell commands with optional user confirmation.
 - 📝 **Todo Management**: Built-in todo list to keep track of agent goals.
@@ -53,7 +53,20 @@ ikode --prompt "Refactor src/main.rs to use a more efficient algorithm"
 
 ### Custom Model
 ```bash
+# OpenAI (GPT-4o, GPT-4, o1, etc.)
+ikode --model "openai::gpt-4o"
+
+# Anthropic (Claude models)
+ikode --model "anthropic::claude-3-5-sonnet-20241022"
+
+# Ollama (local models)
 ikode --model "ollama::llama3"
+
+# Vertex AI (Gemini models)
+ikode --model "vertexai::gemini-1.5-pro"
+
+# AWS Bedrock (Claude, etc.)
+ikode --model "bedrock::anthropic.claude-3-5-sonnet-20241022-v2:0"
 ```
 
 ### User Guidelines
@@ -69,11 +82,21 @@ You can provide custom instructions or project context to the agent in two ways:
 Set the necessary environment variables for your chosen providers:
 
 ```bash
-export OPENAI_API_KEY="your-key"
+# OpenAI
+export OPENAI_API_KEY="your-openai-key"
+
+# Anthropic
+export ANTHROPIC_API_KEY="your-anthropic-key"
+
+# Ollama (local)
 export OLLAMA_URL="http://localhost:11434"
-# For Vertex AI:
-export VERTEXAI_API_URL="..."
+
+# Vertex AI
+export VERTEXAI_API_URL="your-vertexai-url"
 export VERTEXAI_SA_PATH="/path/to/service-account.json"
+
+# AWS Bedrock
+export AWS_REGION="us-east-1"
 ```
 
 Use the `--brave` flag to allow the agent to execute commands and edit files without asking for confirmation (use with caution!).
