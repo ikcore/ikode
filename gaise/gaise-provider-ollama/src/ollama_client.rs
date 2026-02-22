@@ -107,7 +107,7 @@ impl From<&GaiseInstructRequest> for OllamaChatRequest {
 
             OllamaMessage {
                 role: m.role,
-                content,
+                content: if content.is_empty() { None } else { Some(content) },
                 images: if images.is_empty() { None } else { Some(images) },
                 tool_calls,
             }
@@ -126,6 +126,20 @@ impl From<&GaiseInstructRequest> for OllamaChatRequest {
             tools: request.tools.as_ref().map(|ts| ts.iter().map(|t| OllamaTool::from(t.clone())).collect()),
             format: None,
         }
+    }
+}
+
+fn format_ollama_error(err_text: &str) -> String {
+    if err_text.contains("error parsing tool call") {
+        format!(
+            "Ollama failed to parse the model's tool call output. \
+            This usually means the model does not support tool calling. \
+            Try switching to a compatible model such as: llama3.1, llama3.2, qwen2.5-coder, mistral-nemo, or hermes3.\n\
+            Raw error: {}",
+            err_text
+        )
+    } else {
+        format!("Ollama API error: {}", err_text)
     }
 }
 
@@ -153,7 +167,7 @@ impl GaiseClientOllama {
 
         GaiseMessage {
             role: msg.role,
-            content: if msg.content.is_empty() { None } else { Some(OneOrMany::One(GaiseContent::Text { text: msg.content })) },
+            content: msg.content.filter(|s| !s.is_empty()).map(|text| OneOrMany::One(GaiseContent::Text { text })),
             tool_calls,
             tool_call_id: None,
         }
@@ -181,7 +195,7 @@ impl GaiseClient for GaiseClientOllama {
 
         if !response.status().is_success() {
             let err_text = response.text().await?;
-            return Err(format!("Ollama API error: {}", err_text).into());
+            return Err(format_ollama_error(&err_text).into());
         }
 
         let stream = response.bytes_stream();
@@ -222,7 +236,7 @@ impl GaiseClient for GaiseClientOllama {
                 }
 
                 Ok(GaiseInstructStreamResponse {
-                    chunk: GaiseStreamChunk::Text(chunk.message.content),
+                    chunk: GaiseStreamChunk::Text(chunk.message.content.unwrap_or_default()),
                     external_id: None,
                 })
             })
@@ -243,7 +257,7 @@ impl GaiseClient for GaiseClientOllama {
 
         if !response.status().is_success() {
             let err_text = response.text().await?;
-            return Err(format!("Ollama API error: {}", err_text).into());
+            return Err(format_ollama_error(&err_text).into());
         }
 
         let ollama_response: OllamaChatResponse = response.json().await?;
@@ -284,7 +298,7 @@ impl GaiseClient for GaiseClientOllama {
 
         if !response.status().is_success() {
             let err_text = response.text().await?;
-            return Err(format!("Ollama API error: {}", err_text).into());
+            return Err(format_ollama_error(&err_text).into());
         }
 
         let ollama_response: OllamaEmbedResponse = response.json().await?;
