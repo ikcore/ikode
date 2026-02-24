@@ -6,6 +6,7 @@
 iKode is a Rust-based AI coding assistant and generative AI service. It provides a powerful CLI for development tasks and a flexible backend (GAISe) that integrates with multiple AI providers.
 
 Written by: Ian Knowles
+
 Project page: [BadAI Project Page](https://badai.company/open-source/ikode)
 
 ## Project Structure
