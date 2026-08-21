@@ -1,0 +1,1753 @@
+# GAISe model compatibility and lifecycle registry
+# Audited against official provider documentation on 2026-08-20.
+# Context windows, output ceilings, and character budgets (`context_window`,
+# `max_output_tokens`, `max_input_characters`) were verified against the same
+# vendor model pages on 2026-08-21; embedding per-text limits live in
+# `[models.embedding] max_input_tokens`.
+#
+# This registry is advisory. GAISe deliberately accepts arbitrary model IDs, so
+# newly released models can work before this file is updated. Provider model
+# catalogs, regional availability, account access, and API surfaces remain the
+# final authority.
+
+schema_version = 2
+audited_on = "2026-08-20"
+
+# Capability vocabulary (closed; parsed by gaise_core::registry):
+#   input modalities : text, image_input, audio_input, video_input, files
+#   output modalities: text, image_output, audio_output, embeddings
+#   operations       : embeddings -> Embeddings, realtime -> Live,
+#                      text (+streaming) -> Instruct (+InstructStream)
+#   features         : tools, reasoning, adaptive_reasoning, manual_reasoning,
+#                      image_editing, multimodal_embeddings
+# `operations = [...]` overrides the derived operations; `operations = []`
+# marks a model GAISe can describe but not drive (Responses-only, TTS, Live
+# where the provider crate has no live transport).
+# Entries may use `*` wildcards for dynamic families; dated snapshots and
+# Bedrock `-vN:M` suffixes match their base entry automatically.
+
+[[providers]]
+key = "openai"
+gaise_surface = "Chat Completions, Embeddings, and Realtime"
+catalog = "https://developers.openai.com/api/docs/models"
+lifecycle = "https://developers.openai.com/api/docs/deprecations"
+discovery = "GET /v1/models (id, created, owned_by, shutdown_date only)"
+notes = "The current instruct client uses Chat Completions. Responses-only features and the Images API are outside that client."
+
+[[providers]]
+key = "anthropic"
+gaise_surface = "Messages"
+catalog = "https://platform.claude.com/docs/en/about-claude/models/overview"
+lifecycle = "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+discovery = "GET /v1/models (capabilities: image_input, pdf_input, thinking types, effort levels, structured_outputs, token limits)"
+notes = "Direct Claude API lifecycle. Bedrock-hosted Claude has a separate AWS lifecycle."
+
+[[providers]]
+key = "gemini"
+gaise_surface = "Gemini generateContent, streamGenerateContent, Embeddings, and Live"
+catalog = "https://ai.google.dev/gemini-api/docs/models"
+lifecycle = "https://ai.google.dev/gemini-api/docs/deprecations"
+discovery = "GET /v1beta/models (supportedGenerationMethods, token limits, thinking flag; no modalities)"
+notes = "Google AI Gemini API lifecycle; do not reuse these dates for Vertex AI. Shutdown dates on the deprecations page are the earliest possible retirement dates."
+
+[[providers]]
+key = "vertexai"
+gaise_surface = "Vertex AI generateContent, streamGenerateContent, and Embeddings"
+catalog = "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/models"
+lifecycle = "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions"
+discovery = "GET {region}-aiplatform.googleapis.com/v1beta1/publishers/{publisher}/models (names, versionId, launchStage; no modalities or limits)"
+notes = "Model availability and retirement dates are specific to Google Cloud. Short-term availability models retire 45 days after a replacement is released."
+
+[[providers]]
+key = "bedrock"
+gaise_surface = "Converse, ConverseStream, and InvokeModel"
+catalog = "https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html"
+lifecycle = "https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html"
+discovery = "ListFoundationModels, GetFoundationModel, and ListInferenceProfiles"
+notes = "Model IDs, inference profiles, lifecycle, and availability vary by AWS region. AWS replaced the Converse feature matrix with per-model cards (model-card-*.html) and models-api-compatibility.html in mid-2026."
+
+[[providers]]
+key = "elevenlabs"
+gaise_surface = "Text-to-speech, streaming speech, realtime voice WebSocket, and model listing"
+catalog = "https://elevenlabs.io/docs/overview/models"
+lifecycle = "https://elevenlabs.io/docs/overview/models"
+discovery = "GET /v1/models (model_id, languages, can_do_text_to_speech, can_use_style, character limits); GET /v2/voices for voices"
+notes = "Voices are account-specific and default voices expire 2026-12-31; never hard-code a voice id. Character limits per request are model-specific; the character-cost header reports billing."
+
+[[providers]]
+key = "ollama"
+gaise_surface = "Chat, streaming chat, and Embeddings"
+catalog = "https://ollama.com/search"
+lifecycle = "dynamic local catalog"
+discovery = "GET /api/tags"
+notes = "Tags are installed locally and can move; Ollama has no centralized retirement calendar."
+
+# OpenAI: current families
+
+[[models]]
+provider = "openai"
+model = "gpt-5.6"
+aliases = ["gpt-5.6-sol"]
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh", "max"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+notes = "OpenAI documents gpt-5.6-sol as the snapshot ID and gpt-5.6 as the alias that routes to it. On Chat Completions, function tools require reasoning_effort='none'; the adapter applies this automatically (observed API behaviour, not documented). Responses is recommended for reasoning with tools, persisted reasoning, pro mode, programmatic tools, and multi-agent."
+
+[[models]]
+provider = "openai"
+model = "gpt-5.6-terra"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh", "max"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+notes = "On Chat Completions, function tools require reasoning_effort='none'; the adapter applies this automatically. Use Responses for reasoning with tools."
+
+[[models]]
+provider = "openai"
+model = "gpt-5.6-luna"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh", "max"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+notes = "On Chat Completions, function tools require reasoning_effort='none'; the adapter applies this automatically. Use Responses for reasoning with tools."
+
+[[models]]
+provider = "openai"
+model = "gpt-5.5"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+notes = "Defaults to medium reasoning effort."
+
+[[models]]
+provider = "openai"
+model = "gpt-5.5-pro"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "tools"]
+operations = []
+reasoning_values = ["medium", "high", "xhigh"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "not reachable through the Chat Completions instruct client"
+notes = "OpenAI lists Chat Completions as not supported; Responses and Batch only. Streaming is not listed among supported features."
+
+[[models]]
+provider = "openai"
+model = "gpt-5.4"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh"]
+context_window = 1050000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+
+[[models]]
+provider = "openai"
+model = "gpt-5.4-mini"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh"]
+context_window = 400000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+
+[[models]]
+provider = "openai"
+model = "gpt-5.4-nano"
+status = "active"
+capabilities = ["text", "image_input", "reasoning", "streaming", "tools"]
+reasoning_values = ["none", "low", "medium", "high", "xhigh"]
+context_window = 400000
+max_output_tokens = 128000
+gaise_support = "chat-compatible features"
+
+[[models]]
+provider = "openai"
+model = "text-embedding-3-large"
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native"
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { range = { min = 1, max = 3072 } }
+max_input_tokens = 8192
+max_batch = 2048
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "openai"
+model = "text-embedding-3-small"
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native"
+[models.embedding]
+default_dimensions = 1536
+dimension_rule = { range = { min = 1, max = 1536 } }
+max_input_tokens = 8192
+max_batch = 2048
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "openai"
+model = "text-embedding-ada-002"
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Previous generation; fixed 1536 dimensions, no retirement date published."
+[models.embedding]
+default_dimensions = 1536
+dimension_rule = "fixed"
+max_input_tokens = 8192
+max_batch = 2048
+normalized_output = true
+task_control = "none"
+
+[[models]]
+provider = "openai"
+model = "gpt-realtime-2.1"
+status = "active"
+capabilities = ["realtime", "text", "image_input", "audio_input", "audio_output", "reasoning", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high", "xhigh"]
+context_window = 128000
+max_output_tokens = 32000
+gaise_support = "realtime transport"
+notes = "OpenAI documents configurable reasoning effort without enumerating values for 2.1; the list mirrors gpt-realtime-2. 'max' is not documented for Realtime."
+
+[[models]]
+provider = "openai"
+model = "gpt-realtime-2.1-mini"
+status = "active"
+capabilities = ["realtime", "text", "image_input", "audio_input", "audio_output", "reasoning", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high", "xhigh"]
+context_window = 128000
+max_output_tokens = 32000
+gaise_support = "realtime transport"
+
+[[models]]
+provider = "openai"
+model = "gpt-realtime-2"
+status = "active"
+capabilities = ["realtime", "text", "image_input", "audio_input", "audio_output", "reasoning", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high", "xhigh"]
+context_window = 128000
+max_output_tokens = 32000
+gaise_support = "realtime transport"
+
+[[models]]
+provider = "openai"
+model = "gpt-realtime-1.5"
+status = "active"
+capabilities = ["realtime", "text", "image_input", "audio_input", "audio_output", "tools"]
+context_window = 32000
+max_output_tokens = 4096
+gaise_support = "realtime transport"
+notes = "No reasoning controls."
+
+[[models]]
+provider = "openai"
+model = "gpt-audio-1.5"
+status = "active"
+capabilities = ["text", "audio_input", "audio_output", "streaming", "tools"]
+context_window = 128000
+max_output_tokens = 16384
+gaise_support = "Chat audio input is native; audio output is not mapped by the current instruct client"
+notes = "Chat Completions supported; Responses not supported."
+
+[[models]]
+provider = "openai"
+model = "gpt-image-2"
+status = "active"
+capabilities = ["image_input", "image_output", "image_editing"]
+gaise_support = "not yet native"
+notes = "Requires OpenAI Images or Responses image-generation tooling; the GAISe OpenAI instruct client currently uses Chat Completions."
+
+# OpenAI: out-of-surface models visible on the catalog
+# gpt-5.6-cyber and daybreak-*-latest are gated (Daybreak program) and
+# Responses-only; transcription, TTS, and translation models have no GAISe
+# surface. They are listed by GET /v1/models with empty operations.
+
+# OpenAI: announced deprecations most relevant to GAISe
+
+[[models]]
+provider = "openai"
+model = "gpt-5-chat-latest"
+status = "retired"
+shutdown_date = "2026-07-23"
+replacement = "gpt-5.6-sol"
+context_window = 128000
+max_output_tokens = 16384
+
+[[models]]
+provider = "openai"
+model = "gpt-5.1-chat-latest"
+status = "retired"
+shutdown_date = "2026-07-23"
+replacement = "gpt-5.6-sol"
+context_window = 128000
+max_output_tokens = 16384
+
+[[models]]
+provider = "openai"
+model = "gpt-5.2-chat-latest"
+status = "retired"
+shutdown_date = "2026-08-10"
+replacement = "gpt-5.6-sol"
+context_window = 128000
+max_output_tokens = 16384
+
+[[models]]
+provider = "openai"
+model = "gpt-5.3-chat-latest"
+status = "retired"
+shutdown_date = "2026-08-10"
+replacement = "gpt-5.6-sol"
+context_window = 128000
+max_output_tokens = 16384
+
+[[models]]
+provider = "openai"
+model = "gpt-5-2025-08-07"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-sol"
+context_window = 400000
+max_output_tokens = 128000
+
+[[models]]
+provider = "openai"
+model = "gpt-5-mini-2025-08-07"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-terra"
+context_window = 400000
+max_output_tokens = 128000
+
+[[models]]
+provider = "openai"
+model = "gpt-5-nano-2025-08-07"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-luna"
+context_window = 400000
+max_output_tokens = 128000
+
+[[models]]
+provider = "openai"
+model = "gpt-5-pro-2025-10-06"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-sol (reasoning.mode: pro)"
+context_window = 400000
+max_output_tokens = 272000
+
+[[models]]
+provider = "openai"
+model = "o3-2025-04-16"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-sol"
+context_window = 200000
+max_output_tokens = 100000
+
+[[models]]
+provider = "openai"
+model = "o3-pro-2025-06-10"
+status = "deprecated"
+shutdown_date = "2026-12-11"
+replacement = "gpt-5.6-sol (reasoning.mode: pro)"
+context_window = 200000
+max_output_tokens = 100000
+
+[[models]]
+provider = "openai"
+model = "o4-mini"
+aliases = ["o4-mini-2025-04-16"]
+status = "deprecated"
+shutdown_date = "2026-10-23"
+replacement = "gpt-5.6-terra"
+context_window = 200000
+max_output_tokens = 100000
+
+[[models]]
+provider = "openai"
+model = "gpt-4.1-nano"
+aliases = ["gpt-4.1-nano-2025-04-14"]
+status = "deprecated"
+shutdown_date = "2026-10-23"
+replacement = "gpt-5.6-luna"
+context_window = 1047576
+max_output_tokens = 32768
+
+[[models]]
+provider = "openai"
+model = "gpt-image-1"
+status = "deprecated"
+shutdown_date = "2026-10-23"
+replacement = "gpt-image-2"
+
+[[models]]
+provider = "openai"
+model = "gpt-image-1.5"
+aliases = ["gpt-image-1-mini", "chatgpt-image-latest"]
+status = "deprecated"
+shutdown_date = "2026-12-01"
+replacement = "gpt-image-2"
+
+[[models]]
+provider = "openai"
+model = "gpt-realtime"
+aliases = ["gpt-4o-realtime", "gpt-realtime-mini", "gpt-4o-mini-realtime"]
+status = "deprecated"
+shutdown_date = "2027-01-20"
+replacement = "gpt-realtime-2.1 or gpt-realtime-2.1-mini"
+context_window = 32000
+max_output_tokens = 4096
+notes = "Context 32K for gpt-realtime, gpt-realtime-mini, and gpt-4o-realtime; gpt-4o-mini-realtime-preview is 16K."
+
+[[models]]
+provider = "openai"
+model = "gpt-audio"
+aliases = ["gpt-4o-audio", "gpt-audio-mini", "gpt-4o-mini-audio"]
+status = "deprecated"
+shutdown_date = "2027-01-20"
+replacement = "gpt-audio-1.5"
+context_window = 128000
+max_output_tokens = 16384
+
+# Anthropic Claude API
+
+[[models]]
+provider = "anthropic"
+model = "claude-fable-5"
+status = "active"
+retirement_not_before = "2027-06-09"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+notes = "Adaptive thinking is always on and cannot be disabled; only the effort level is configurable. Non-default temperature/top_p/top_k are rejected."
+
+[[models]]
+provider = "anthropic"
+model = "claude-mythos-5"
+status = "limited_availability"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native when account access exists"
+notes = "Adaptive thinking is always on and cannot be disabled."
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-5"
+status = "active"
+retirement_not_before = "2027-07-24"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+notes = "Released 2026-07-24; Anthropic's recommended default model. Adaptive-only thinking, on by default (disabling is accepted only at effort high or below); budget_tokens is rejected. Non-default temperature/top_p/top_k are rejected, as on Opus 4.7. 1M context, 128k max output."
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-8"
+status = "active"
+retirement_not_before = "2027-05-28"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-7"
+status = "active"
+retirement_not_before = "2027-04-16"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-6"
+status = "active"
+retirement_not_before = "2027-02-05"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-5-20251101"
+aliases = ["claude-opus-4-5"]
+status = "active"
+retirement_not_before = "2026-11-24"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-sonnet-5"
+status = "active"
+retirement_not_before = "2027-06-30"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-sonnet-4-6"
+status = "active"
+retirement_not_before = "2027-02-17"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-sonnet-4-5-20250929"
+aliases = ["claude-sonnet-4-5"]
+status = "active"
+retirement_not_before = "2026-09-29"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native"
+
+[[models]]
+provider = "anthropic"
+model = "claude-haiku-4-5-20251001"
+aliases = ["claude-haiku-4-5"]
+status = "active"
+retirement_not_before = "2026-10-15"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native"
+notes = "Manual thinking budget; no adaptive thinking or effort parameter."
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-1-20250805"
+status = "retired"
+shutdown_date = "2026-08-05"
+replacement = "claude-opus-4-8"
+context_window = 200000
+max_output_tokens = 32000
+
+[[models]]
+provider = "anthropic"
+model = "claude-opus-4-20250514"
+status = "retired"
+shutdown_date = "2026-06-15"
+replacement = "claude-opus-4-8"
+context_window = 200000
+max_output_tokens = 32000
+
+[[models]]
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+status = "retired"
+shutdown_date = "2026-06-15"
+replacement = "claude-sonnet-4-6"
+context_window = 200000
+max_output_tokens = 64000
+
+[[models]]
+provider = "anthropic"
+model = "claude-mythos-preview"
+status = "deprecated"
+replacement = "claude-mythos-5"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+context_window = 1000000
+max_output_tokens = 128000
+notes = "Deprecated in favour of claude-mythos-5; no retirement date is published. Invitation-only (Project Glasswing)."
+
+# Gemini API (Google AI)
+# Text models accept text, image, video, audio, and PDF input. Thinking
+# levels per family (3.x uses thinkingLevel; the thinking guide now lists the
+# 2.5 family under thinkingLevel as well, while the Live guide still documents
+# thinkingBudget for 2.5 native audio — the mapper keeps thinkingBudget for
+# 2.5 until verified against the API).
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.7-flash"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "GA 2026-08-13. thinkingLevel minimal is not supported (default medium). Live API not supported."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.6-flash"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "Released 2026-07-21. Fixed sampling: temperature, top_p, and top_k are deprecated (changelog 2026-07-21) and omitted by the mapper."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.5-flash"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.5-flash-lite"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-flash-lite"
+status = "stable"
+shutdown_date = "2027-05-07"
+replacement = "gemini-3.5-flash-lite"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "Thinking is supported; the exact thinkingLevel set is not tabulated in the thinking guide."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-pro-preview"
+status = "preview"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "No shutdown date announced. A gemini-3.1-pro-preview-customtools variant endpoint exists."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3-flash-preview"
+status = "preview"
+replacement = "gemini-3.6-flash"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "No shutdown date announced."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-flash-live-preview"
+status = "preview"
+capabilities = ["realtime", "text", "image_input", "video_input", "audio_input", "audio_output", "reasoning", "tools"]
+reasoning_values = ["minimal", "low", "medium", "high"]
+context_window = 131072
+max_output_tokens = 65536
+gaise_support = "native Live API transport"
+notes = "Released 2026-03-11; no shutdown date announced."
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.5-flash-native-audio-preview-12-2025"
+status = "preview_legacy"
+replacement = "gemini-3.1-flash-live-preview"
+capabilities = ["realtime", "text", "video_input", "audio_input", "audio_output", "reasoning", "tools"]
+context_window = 131072
+max_output_tokens = 8192
+gaise_support = "Live transport; migration recommended"
+notes = "Live guide still documents thinkingBudget (0 disables) for this model."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-flash-image"
+status = "stable"
+capabilities = ["text", "image_input", "files", "image_output", "image_editing", "reasoning", "streaming"]
+reasoning_values = ["minimal", "high"]
+context_window = 131072
+max_output_tokens = 32768
+gaise_support = "native image output through generateContent"
+notes = "Released 2026-05-28. Function calling and structured outputs are not supported."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-flash-lite-image"
+status = "stable"
+capabilities = ["text", "image_input", "image_output", "image_editing", "reasoning", "streaming", "tools"]
+reasoning_values = ["minimal", "high"]
+context_window = 65536
+max_output_tokens = 4096
+gaise_support = "native image output through generateContent"
+notes = "Released June 2026; the recommended image model (1K output only). Function calling is supported, unlike the other image models."
+
+[[models]]
+provider = "gemini"
+model = "gemini-3-pro-image"
+status = "stable"
+capabilities = ["text", "image_input", "image_output", "image_editing", "reasoning", "streaming"]
+context_window = 65536
+max_output_tokens = 32768
+gaise_support = "native image output through generateContent"
+notes = "Released 2026-05-28. Function calling is not supported."
+
+[[models]]
+provider = "gemini"
+model = "gemini-embedding-2"
+aliases = ["gemini-embedding-2-preview"]
+status = "stable"
+capabilities = ["embeddings", "multimodal_embeddings"]
+gaise_support = "native"
+notes = "Released 2026-04-22. Text, image, video, audio, and PDF input. The catalog table still shows the -preview endpoint name; the model page uses gemini-embedding-2."
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { range = { min = 128, max = 3072 } }
+max_input_tokens = 8192
+normalized_output = true
+normalizes_truncation = true
+task_control = "prompt_instruction"
+
+[[models]]
+provider = "gemini"
+model = "gemini-3.1-flash-tts-preview"
+status = "preview"
+capabilities = ["text", "audio_output"]
+operations = []
+context_window = 8192
+max_output_tokens = 16384
+gaise_support = "text-to-speech is outside the instruct surface"
+notes = "Released 2026-04-13; replacement for the 2.5 TTS previews."
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.5-pro"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+notes = "No shutdown date announced on the Gemini API deprecations page; the 2026-10 date circulating online is the Vertex AI retirement and must not be applied here."
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.5-flash"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+notes = "No shutdown date announced on the Gemini API deprecations page."
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.5-flash-lite"
+status = "stable"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+notes = "Released 2025-07-22; thinking is off by default. No shutdown date announced."
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.5-flash-image"
+status = "deprecated"
+shutdown_date = "2026-10-02"
+replacement = "gemini-3.1-flash-image"
+context_window = 65536
+max_output_tokens = 32768
+notes = "The deprecations page names gemini-3.1-flash-image-preview (itself shut down 2026-06-25); the GA replacements are gemini-3.1-flash-image or gemini-3.1-flash-lite-image."
+
+[[models]]
+provider = "gemini"
+model = "gemini-embedding-001"
+status = "deprecated"
+shutdown_date = "2028-05-14"
+replacement = "gemini-embedding-2"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Still listed as callable; the earlier registry date (2026-07-14) was the release date."
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { range = { min = 128, max = 3072 } }
+max_input_tokens = 2048
+normalized_output = true
+normalizes_truncation = false
+task_control = "task_type"
+
+[[models]]
+provider = "gemini"
+model = "embedding-2-preview"
+status = "retired"
+shutdown_date = "2026-08-10"
+replacement = "gemini-embedding-2"
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.0-flash"
+status = "retired"
+shutdown_date = "2026-06-01"
+replacement = "gemini-3.6-flash"
+context_window = 1048576
+max_output_tokens = 8192
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.0-flash-lite"
+status = "retired"
+shutdown_date = "2026-06-01"
+replacement = "gemini-3.1-flash-lite"
+context_window = 1048576
+max_output_tokens = 8192
+
+[[models]]
+provider = "gemini"
+model = "gemini-2.0-flash-live-001"
+status = "retired"
+shutdown_date = "2025-12-09"
+replacement = "gemini-3.1-flash-live-preview"
+
+[[models]]
+provider = "gemini"
+model = "gemini-live-2.5-flash-preview"
+status = "retired"
+shutdown_date = "2025-12-09"
+replacement = "gemini-3.1-flash-live-preview"
+
+# Vertex AI / Gemini Enterprise Agent Platform
+# Dates come from the Vertex model-versions page only. Gemini text models on
+# Vertex accept text, image, audio, video, and PDF/plain-text documents.
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.7-flash"
+status = "short_term_active"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "GA 2026-08-13; short-term availability table, no retirement date announced."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.6-flash"
+status = "short_term_active"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "Released 2026-07-21; short-term availability (retires 45 days after a designated replacement). gemini-3.7-flash has not been named as that replacement as of 2026-08-20."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.5-flash"
+status = "active"
+retirement_not_before = "2027-05-19"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.5-flash-lite"
+status = "active"
+retirement_not_before = "2027-07-21"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.1-flash-lite"
+status = "active"
+retirement_not_before = "2027-05-07"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "GA 2026-05-07."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3-flash-preview"
+status = "preview"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native"
+notes = "Public preview since 2025-12-17; no retirement row on the model-versions page."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.1-flash-image"
+status = "active"
+retirement_not_before = "2027-05-28"
+capabilities = ["text", "image_input", "video_input", "files", "image_output", "image_editing", "reasoning", "streaming"]
+context_window = 131072
+max_output_tokens = 32768
+gaise_support = "native image output through generateContent"
+notes = "Video input remains in preview. Function calling is not supported."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3.1-flash-lite-image"
+status = "short_term_active"
+capabilities = ["text", "image_input", "video_input", "files", "image_output", "image_editing", "reasoning", "streaming"]
+context_window = 65536
+max_output_tokens = 4096
+gaise_support = "native image output through generateContent"
+notes = "GA 2026-06-30; no retirement date announced. Function calling is not supported on Vertex. Max output 4,096 tokens."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-3-pro-image"
+status = "active"
+retirement_not_before = "2027-05-28"
+capabilities = ["text", "image_input", "files", "image_output", "image_editing", "reasoning", "streaming"]
+context_window = 65536
+max_output_tokens = 32768
+gaise_support = "native image output through generateContent"
+notes = "Function calling is not supported; video input is not supported; 4K output remains in preview."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-embedding-2"
+aliases = ["gemini-embedding-2-preview"]
+status = "active"
+capabilities = ["embeddings", "multimodal_embeddings"]
+operations = []
+gaise_support = "not yet: Vertex serves it via :embedContent on the aiplatform.{location}.rep.googleapis.com host, which the adapter does not call; use gemini::gemini-embedding-2"
+notes = "GA 2026-04-22 (preview alias since 2026-03-10). Text, image, audio, video, and PDF input; 8,192 input tokens; up to 3,072 dimensions with MRL. No retirement date published."
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { range = { min = 128, max = 3072 } }
+max_input_tokens = 8192
+normalized_output = true
+normalizes_truncation = true
+task_control = "prompt_instruction"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-embedding-001"
+status = "active"
+retirement_not_before = "2028-05-20"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Previous-generation text embedding model; gemini-embedding-2 is current. Accepts one input text per :predict call; GAISe loops."
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { range = { min = 1, max = 3072 } }
+max_input_tokens = 2048
+max_batch = 1
+normalized_output = true
+normalizes_truncation = false
+task_control = "task_type"
+single_input = true
+
+[[models]]
+provider = "vertexai"
+model = "text-embedding-005"
+aliases = ["text-embedding-004", "text-multilingual-embedding-002"]
+status = "active"
+retirement_not_before = "2027-04-01"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Legacy text embedding family; all retire 2027-04-01. 768 dimensions, 2,048 tokens, 250 texts per call."
+[models.embedding]
+default_dimensions = 768
+dimension_rule = { range = { min = 1, max = 768 } }
+max_input_tokens = 2048
+max_batch = 250
+normalized_output = true
+normalizes_truncation = false
+task_control = "task_type"
+
+[[models]]
+provider = "vertexai"
+model = "multimodalembedding@001"
+status = "active"
+retirement_not_before = "2027-04-01"
+capabilities = ["embeddings", "multimodal_embeddings"]
+operations = []
+gaise_support = "not yet: uses the image/video embedding request schema"
+notes = "1408 dimensions (128/256/512 for text+image); 32 text tokens. Retires 2027-04-01."
+[models.embedding]
+default_dimensions = 1408
+dimension_rule = { set = [128, 256, 512, 1408] }
+max_input_tokens = 32
+task_control = "none"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-live-2.5-flash-native-audio"
+status = "active"
+shutdown_date = "2026-12-13"
+capabilities = ["realtime", "text", "image_input", "video_input", "audio_input", "audio_output", "tools"]
+operations = []
+context_window = 131072
+max_output_tokens = 65536
+gaise_support = "not supported: the Vertex AI adapter has no Live transport"
+notes = "GA 2025-12-12. Documented as a 128K context window and 64K output."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-2.5-pro"
+status = "deprecated"
+shutdown_date = "2026-10-20"
+replacement = "gemini-3.5-flash"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-2.5-flash"
+status = "deprecated"
+shutdown_date = "2026-10-20"
+replacement = "gemini-3.5-flash-lite or gemini-3.1-flash-lite"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-2.5-flash-lite"
+status = "deprecated"
+shutdown_date = "2026-10-20"
+replacement = "gemini-3.1-flash-lite or Gemma 4"
+capabilities = ["text", "image_input", "audio_input", "video_input", "files", "reasoning", "streaming", "tools"]
+context_window = 1048576
+max_output_tokens = 65536
+gaise_support = "native (thinkingBudget mapper path)"
+
+[[models]]
+provider = "vertexai"
+model = "gemini-2.5-flash-image"
+status = "deprecated"
+shutdown_date = "2026-10-02"
+replacement = "gemini-3.1-flash-lite-image"
+capabilities = ["text", "image_input", "image_output", "image_editing", "streaming"]
+context_window = 32768
+max_output_tokens = 32768
+notes = "Vertex documents a 32,768-token context window for this model; the Gemini API documents 65,536."
+
+[[models]]
+provider = "vertexai"
+model = "gemini-2.0-flash"
+aliases = ["gemini-2.0-flash-lite"]
+status = "retired"
+shutdown_date = "2026-06-01"
+replacement = "gemini-3.1-flash-lite"
+
+# Amazon Bedrock: representative current and lifecycle-sensitive families
+# IDs are region-specific. Callers usually invoke cross-region inference
+# profiles (us., eu., apac., jp., au., global. prefixes); the registry matcher
+# strips those prefixes and Bedrock `-vN:M` suffixes. ListFoundationModels
+# reports TEXT/IMAGE/EMBEDDING modalities and streaming only; document, tool,
+# and reasoning support below comes from the per-model cards.
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-5"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-07-24. Profiles: us., eu., au., global. Adaptive thinking on by default; can be disabled with effort capped at high. Fixed sampling (temperature 1.0 or unset, top_k unsupported)."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-fable-5"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-06-09; in-region us-east-1 only, geo profile us. only. Requires the provider_data_share data-retention mode. Adaptive thinking always on; temperature must be 1.0 or unset, top_p >= 0.99 or unset, top_k unsupported. May return stop_reason 'refusal'."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-4-8"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-05-28. Profiles: us., eu., jp., au. Prompt-cache minimum 4,096 tokens."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-sonnet-5"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-06-30. Fixed sampling as for Fable 5."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-4-7"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "xhigh", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-04-16. Profiles: us., eu., jp., au., global. thinking.type adaptive only; temperature, top_p, and top_k are no longer supported."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-sonnet-4-6"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "max"]
+context_window = 1000000
+max_output_tokens = 64000
+gaise_support = "native via Converse"
+notes = "Launched 2026-02-17. Profiles: us., eu., au., jp., global. Structured outputs supported. The Bedrock model card caps output at 64K where the direct API allows 128K."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-4-6-v1"
+status = "active"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high", "max"]
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "native via Converse"
+notes = "Launched 2026-02-05. Profiles: us., eu., au., global."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-4-5-20251101-v1:0"
+status = "active"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native via Converse"
+notes = "Profiles: us., eu., global. EOL floor (2026-03-25) has passed without a Legacy announcement."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+status = "active"
+retirement_not_before = "2026-09-29"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native via Converse"
+notes = "Profiles: us., eu., au., jp., global."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-haiku-4-5-20251001-v1:0"
+status = "active"
+retirement_not_before = "2026-10-01"
+capabilities = ["text", "image_input", "files", "manual_reasoning", "streaming", "tools"]
+context_window = 200000
+max_output_tokens = 64000
+gaise_support = "native via Converse"
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-mythos-5"
+status = "limited_availability"
+capabilities = ["text", "image_input", "files", "adaptive_reasoning", "streaming", "tools"]
+operations = []
+context_window = 1000000
+max_output_tokens = 128000
+gaise_support = "not reachable: Messages API on bedrock-mantle only; Converse and InvokeModel are not supported"
+notes = "us-east-1 preview; requires provider_data_share data retention."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-2-lite-v1:0"
+status = "active"
+capabilities = ["text", "image_input", "video_input", "files", "streaming", "tools"]
+context_window = 1000000
+max_output_tokens = 64000
+gaise_support = "native via Converse"
+notes = "The only Converse-capable Nova 2 model. Client-side tool calling supported; structured outputs not supported; the model card lists no reasoning controls."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-2-sonic-v1:0"
+status = "active"
+capabilities = ["realtime", "text", "audio_input", "audio_output", "tools"]
+operations = []
+context_window = 1000000
+max_output_tokens = 64000
+gaise_support = "not supported: InvokeModelWithBidirectionalStream only"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-2-multimodal-embeddings-v1:0"
+status = "active"
+capabilities = ["embeddings", "multimodal_embeddings"]
+gaise_support = "text embeddings via InvokeModel (SINGLE_EMBEDDING schema); image/audio/video input not mapped"
+notes = "us-east-1 and us-gov-west-1. Text, image, audio, video, and document input; async invocation for audio/video. `task: query` maps to TEXT_RETRIEVAL; pass GENERIC_RETRIEVAL / IMAGE_RETRIEVAL as a custom task to search a mixed index."
+[models.embedding]
+default_dimensions = 3072
+dimension_rule = { set = [256, 384, 1024, 3072] }
+max_input_tokens = 8192
+max_batch = 1
+task_control = "embedding_purpose"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-pro-v1:0"
+status = "active"
+capabilities = ["text", "image_input", "video_input", "files", "streaming", "tools"]
+context_window = 300000
+max_output_tokens = 5000
+gaise_support = "native via Converse"
+notes = "Bedrock model card: 300K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). Accepts either temperature or topP."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-lite-v1:0"
+status = "active"
+capabilities = ["text", "image_input", "video_input", "files", "streaming", "tools"]
+context_window = 300000
+max_output_tokens = 5000
+gaise_support = "native via Converse"
+notes = "Bedrock model card: 300K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). Accepts either temperature or topP."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-micro-v1:0"
+status = "active"
+capabilities = ["text", "streaming", "tools"]
+context_window = 128000
+max_output_tokens = 5000
+gaise_support = "native via Converse"
+notes = "Text only. Bedrock model card: 128K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). Accepts either temperature or topP."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-*"
+status = "dynamic_active_family"
+capabilities = ["text", "image_input", "video_input", "files", "streaming", "tools"]
+context_window = 128000
+max_output_tokens = 5000
+gaise_support = "Converse where the regional catalog lists the model"
+notes = "Nova Pro/Lite/Micro (v1) remain Active with regional us./eu./apac. profiles; verify with ListFoundationModels. Context window recorded as the family floor (Nova Micro, 128K); Nova Pro and Lite are 300K and have their own entries."
+
+[[models]]
+provider = "bedrock"
+model = "amazon.titan-embed-text-v2:0"
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "In-region only. 8,192 tokens / 50,000 characters per text; one text per call; `normalize` is a native flag."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = { set = [256, 512, 1024] }
+max_input_tokens = 8192
+max_batch = 1
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.titan-embed-text-v1"
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "First-generation Titan text embeddings; fixed 1536 dimensions, one text per call."
+[models.embedding]
+default_dimensions = 1536
+dimension_rule = "fixed"
+max_input_tokens = 8192
+max_batch = 1
+task_control = "none"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.titan-embed-image-v1"
+status = "active"
+capabilities = ["embeddings", "multimodal_embeddings"]
+gaise_support = "text input via InvokeModel; no image path"
+notes = "Text + image embeddings in one space; 256 text tokens, 25 MB images; one input per call."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = { set = [256, 384, 1024] }
+max_input_tokens = 256
+max_batch = 1
+task_control = "none"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.titan-embed-*"
+status = "dynamic_active_family"
+capabilities = ["embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "Catch-all for Titan embedding ids not listed above; verify with ListFoundationModels."
+
+[[models]]
+provider = "bedrock"
+model = "cohere.embed-v4:0"
+status = "active"
+capabilities = ["embeddings", "multimodal_embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "Launched 2025-04-15; text and image input; profiles us., eu., global. `input_type` is required; 96 inputs per call."
+[models.embedding]
+default_dimensions = 1536
+dimension_rule = { set = [256, 512, 1024, 1536] }
+max_input_tokens = 128000
+max_batch = 96
+task_control = "input_type"
+
+[[models]]
+provider = "bedrock"
+model = "cohere.embed-english-v3"
+aliases = ["cohere.embed-multilingual-v3"]
+status = "active"
+capabilities = ["embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "Fixed 1024 dimensions, 512 tokens per text, 96 texts per call; `input_type` is required."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = "fixed"
+max_input_tokens = 512
+max_batch = 96
+task_control = "input_type"
+
+[[models]]
+provider = "bedrock"
+model = "cohere.embed-*"
+status = "dynamic_active_family"
+capabilities = ["embeddings"]
+gaise_support = "native via InvokeModel"
+notes = "Catch-all for other Cohere embed ids; `input_type` is always required."
+[models.embedding]
+task_control = "input_type"
+
+# Amazon Bedrock: lifecycle-sensitive entries
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-opus-4-1-20250805-v1:0"
+status = "legacy"
+shutdown_date = "2027-01-08"
+replacement = "anthropic.claude-opus-4-8"
+context_window = 200000
+max_output_tokens = 32000
+notes = "Legacy since 2026-07-08; public extended access (higher pricing) from 2026-10-08. us. profile only."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-sonnet-4-20250514-v1:0"
+status = "legacy"
+shutdown_date = "2026-10-14"
+replacement = "anthropic.claude-sonnet-5"
+context_window = 200000
+max_output_tokens = 64000
+notes = "Legacy since 2026-04-14; extended-access pricing applies since 2026-07-14."
+
+[[models]]
+provider = "bedrock"
+model = "anthropic.claude-3-haiku-20240307-v1:0"
+status = "legacy"
+shutdown_date = "2026-09-10"
+replacement = "anthropic.claude-haiku-4-5-20251001-v1:0"
+context_window = 200000
+max_output_tokens = 4096
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-premier-v1:0"
+status = "legacy"
+shutdown_date = "2026-09-14"
+replacement = "amazon.nova-2-lite-v1:0"
+context_window = 1000000
+max_output_tokens = 25000
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-sonic-v1:0"
+status = "legacy"
+shutdown_date = "2026-09-14"
+replacement = "amazon.nova-2-sonic-v1:0"
+context_window = 300000
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-reel-v1:*"
+status = "legacy"
+shutdown_date = "2026-09-30"
+
+[[models]]
+provider = "bedrock"
+model = "amazon.nova-canvas-v1:0"
+status = "legacy"
+shutdown_date = "2026-09-30"
+
+[[models]]
+provider = "bedrock"
+model = "cohere.command-r-*"
+status = "retired"
+shutdown_date = "2026-08-19"
+context_window = 128000
+max_output_tokens = 4096
+notes = "cohere.command-r-v1:0 and cohere.command-r-plus-v1:0."
+
+# ElevenLabs: text-to-speech and realtime voice (API reference audited 2026-08-20)
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_v3"
+status = "active"
+capabilities = ["speech", "realtime"]
+max_input_characters = 5000
+gaise_support = "speech via /v1/text-to-speech; realtime via the text-to-dialogue WebSocket"
+notes = "Flagship, 70+ languages, 5,000 characters per request. Not supported on the stream-input WebSocket (GAISe uses text-to-dialogue); no request stitching; audio tags in text."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_v3_conversational"
+status = "active"
+capabilities = ["text", "speech", "realtime"]
+operations = ["live"]
+gaise_support = "realtime only via the text-to-dialogue WebSocket (one voice)"
+notes = "~280 ms latency variant of v3 for realtime use."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_multilingual_v2"
+status = "active"
+capabilities = ["speech", "realtime"]
+max_input_characters = 10000
+gaise_support = "native"
+notes = "Default model; 29 languages; 10,000 characters per request. Rejects language_code (the adapter omits it). style and speaker boost supported."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_flash_v2_5"
+status = "active"
+capabilities = ["speech", "realtime"]
+max_input_characters = 40000
+gaise_support = "native"
+notes = "~75 ms latency, 32 languages, 40,000 characters per request, accepts language_code. Numbers are not normalized by default."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_flash_v2"
+status = "active"
+capabilities = ["speech", "realtime"]
+max_input_characters = 30000
+gaise_support = "native"
+notes = "English only; 30,000 characters per request."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_turbo_v2_5"
+status = "deprecated"
+replacement = "eleven_flash_v2_5"
+capabilities = ["speech", "realtime"]
+max_input_characters = 40000
+gaise_support = "native while available"
+notes = "Functionally equivalent to eleven_flash_v2_5; no shutdown date published. Character limit as for the functionally equivalent eleven_flash_v2_5."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_turbo_v2"
+status = "deprecated"
+replacement = "eleven_flash_v2"
+capabilities = ["speech", "realtime"]
+max_input_characters = 30000
+gaise_support = "native while available"
+notes = "Character limit as for the functionally equivalent eleven_flash_v2."
+
+[[models]]
+provider = "elevenlabs"
+model = "eleven_multilingual_sts_v2"
+aliases = ["eleven_english_sts_v2"]
+status = "active"
+capabilities = ["audio_input", "audio_output"]
+operations = []
+gaise_support = "not supported: speech-to-speech has no GAISe surface"
+
+[[models]]
+provider = "elevenlabs"
+model = "scribe_v2"
+aliases = ["scribe_v2_realtime"]
+status = "active"
+capabilities = ["audio_input", "text"]
+operations = []
+gaise_support = "not supported: speech-to-text has no GAISe surface yet"
+notes = "scribe_v1 is deprecated."
+
+# Ollama: capability families are discovered from the local installation
+
+[[models]]
+provider = "ollama"
+model = "qwen3:*"
+status = "dynamic_local"
+capabilities = ["text", "reasoning", "streaming", "tools"]
+reasoning_values = ["true", "false"]
+context_window = 40960
+gaise_support = "native"
+notes = "Context 40,960 on the original dense tags (0.6b-32b); the 2507 builds, 4b, 30b, and 235b are 262,144. Ollama serves a smaller default num_ctx; raise it per request."
+
+[[models]]
+provider = "ollama"
+model = "gpt-oss:*"
+status = "dynamic_local"
+capabilities = ["text", "reasoning", "streaming", "tools"]
+reasoning_values = ["low", "medium", "high"]
+context_window = 131072
+gaise_support = "native"
+notes = "Context 131,072 on 20b and 120b."
+
+[[models]]
+provider = "ollama"
+model = "deepseek-r1:*"
+aliases = ["deepseek-v3.1:*"]
+status = "dynamic_local"
+capabilities = ["text", "reasoning", "streaming"]
+reasoning_values = ["true", "false"]
+context_window = 131072
+gaise_support = "native"
+notes = "Context 131,072 on the distilled tags; deepseek-r1:671b and deepseek-v3.1 are 163,840."
+
+[[models]]
+provider = "ollama"
+model = "gemma4:*"
+status = "dynamic_local"
+capabilities = ["text", "image_input", "streaming"]
+context_window = 131072
+gaise_support = "native when the installed tag advertises vision"
+notes = "Context 131,072 on e2b/e4b; 12b, 26b, and 31b are 262,144."
+
+# Ollama embedding families. Ollama normalizes every vector it returns, so
+# `normalized_output` / `normalizes_truncation` are true throughout; the
+# task controls below are each family's documented prefix convention.
+
+[[models]]
+provider = "ollama"
+model = "embeddinggemma:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "EmbeddingGemma 300m; Matryoshka 768/512/256/128; 2,048-token context; Google prompt-instruction convention."
+[models.embedding]
+default_dimensions = 768
+dimension_rule = { set = [128, 256, 512, 768] }
+max_input_tokens = 2048
+normalized_output = true
+normalizes_truncation = true
+task_control = "prompt_instruction"
+
+[[models]]
+provider = "ollama"
+model = "nomic-embed-text:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "nomic-embed-text v1.5; Matryoshka 64-768; 8,192-token context (raise num_ctx); prefixes are required for good retrieval."
+[models.embedding]
+default_dimensions = 768
+dimension_rule = { range = { min = 64, max = 768 } }
+max_input_tokens = 8192
+normalized_output = true
+normalizes_truncation = true
+task_control = { prefix = { query = "search_query: ", document = "search_document: ", classification = "classification: ", clustering = "clustering: " } }
+
+[[models]]
+provider = "ollama"
+model = "nomic-embed-text-v2-moe:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Multilingual MoE; Matryoshka 256-768; 512-token context."
+[models.embedding]
+default_dimensions = 768
+dimension_rule = { range = { min = 256, max = 768 } }
+max_input_tokens = 512
+normalized_output = true
+normalizes_truncation = true
+task_control = { prefix = { query = "search_query: ", document = "search_document: " } }
+
+[[models]]
+provider = "ollama"
+model = "qwen3-embedding:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "0.6b/4b/8b = 1024/2560/4096 dimensions (Matryoshka 32-4096); 32k context; queries take an instruction."
+[models.embedding]
+dimension_rule = { range = { min = 32, max = 4096 } }
+max_input_tokens = 32768
+normalized_output = true
+normalizes_truncation = true
+task_control = { query_instruction = "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:" }
+
+[[models]]
+provider = "ollama"
+model = "mxbai-embed-large:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "mixedbread mxbai-embed-large-v1; fixed 1024; 512-token context; queries take an instruction."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = "fixed"
+max_input_tokens = 512
+normalized_output = true
+normalizes_truncation = true
+task_control = { query_instruction = "Represent this sentence for searching relevant passages: " }
+
+[[models]]
+provider = "ollama"
+model = "bge-m3:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "BAAI bge-m3; fixed 1024; 8,192-token context; multilingual; no prefix."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = "fixed"
+max_input_tokens = 8192
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "ollama"
+model = "bge-large:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "BAAI bge-large-en-v1.5; fixed 1024; 512-token context; optional query instruction."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = "fixed"
+max_input_tokens = 512
+normalized_output = true
+normalizes_truncation = true
+task_control = { query_instruction = "Represent this sentence for searching relevant passages: " }
+
+[[models]]
+provider = "ollama"
+model = "all-minilm:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "all-MiniLM-L6/L12; fixed 384; 256-token context; English."
+[models.embedding]
+default_dimensions = 384
+dimension_rule = "fixed"
+max_input_tokens = 256
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "ollama"
+model = "snowflake-arctic-embed:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Arctic-embed v1 22m-335m; 384-1024 dimensions by tag; 512-token context; queries take an instruction."
+[models.embedding]
+dimension_rule = "fixed"
+max_input_tokens = 512
+normalized_output = true
+normalizes_truncation = true
+task_control = { query_instruction = "Represent this sentence for searching relevant passages: " }
+
+[[models]]
+provider = "ollama"
+model = "snowflake-arctic-embed2:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "Arctic-embed 2.0; 1024 dimensions (Matryoshka to 256); 8,192-token context; multilingual; queries take `query: `."
+[models.embedding]
+default_dimensions = 1024
+dimension_rule = { set = [256, 1024] }
+max_input_tokens = 8192
+normalized_output = true
+normalizes_truncation = true
+task_control = { query_instruction = "query: " }
+
+[[models]]
+provider = "ollama"
+model = "granite-embedding:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "IBM Granite 30m (384, English) / 278m (768, 12 languages); 512-token context; no prefix."
+[models.embedding]
+dimension_rule = "fixed"
+max_input_tokens = 512
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"
+
+[[models]]
+provider = "ollama"
+model = "paraphrase-multilingual:*"
+status = "dynamic_local"
+capabilities = ["embeddings"]
+gaise_support = "native"
+notes = "paraphrase-multilingual-MiniLM-L12-v2; fixed 768; 128-token context; 50+ languages."
+[models.embedding]
+default_dimensions = 768
+dimension_rule = "fixed"
+max_input_tokens = 128
+normalized_output = true
+normalizes_truncation = true
+task_control = "none"

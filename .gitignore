@@ -1,17 +1,43 @@
-# Rust
-/target
+# Rust build output (workspace target dir; iKode also builds to D:/Projects/Target)
+/target/
+**/target/
 
-# IDEs
+# rustfmt / debug artifacts
+**/*.rs.bk
+*.pdb
+
+# iKode derived state (rebuildable cache — safe to delete; keep config.toml & ikode.md)
+.ikode/graph.log*
+.ikode/embeddings/
+.ikode/tesseract/
+.ikode/plan/
+.ikode/sessions/
+.ikode/goals.json
+
+# iKode local, machine-specific settings (mode + allow/deny rules)
+.ikode/settings.local.json
+
+# Claude Code local (machine-specific) settings — keep shared .claude/ config tracked
+.claude/settings.local.json
+
+# Environment / secrets
+.env
+.env.*
+.ikenv
+.ikenv.*
+*.key
+*.pem
+
+# Editor / IDE
 .idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-
-# Junie
 .junie/
+.vs/
+*.iml
+*.swp
+*~
 
-# Other
-.output.txt
+# OS cruft
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini

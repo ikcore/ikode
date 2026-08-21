@@ -1,0 +1,38 @@
+[package]
+name = "gaise-client"
+description = "Provider router for GAISe — routes 'provider::model' strings to the correct GenAI provider"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[dependencies]
+gaise-core.workspace = true
+gaise-provider-ollama = { workspace = true, optional = true }
+gaise-provider-vertexai = { workspace = true, optional = true }
+gaise-provider-openai = { workspace = true, optional = true, features = [] }
+gaise-provider-bedrock = { workspace = true, optional = true }
+gaise-provider-anthropic = { workspace = true, optional = true }
+gaise-provider-gemini = { workspace = true, optional = true, features = [] }
+gaise-provider-elevenlabs = { workspace = true, optional = true }
+
+async-trait.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+default = ["ollama", "vertexai", "openai", "bedrock", "anthropic", "gemini", "elevenlabs"]
+ollama = ["dep:gaise-provider-ollama"]
+vertexai = ["dep:gaise-provider-vertexai"]
+openai = ["dep:gaise-provider-openai"]
+bedrock = ["dep:gaise-provider-bedrock"]
+anthropic = ["dep:gaise-provider-anthropic"]
+gemini = ["dep:gaise-provider-gemini"]
+elevenlabs = ["dep:gaise-provider-elevenlabs"]
+live = ["gaise-provider-gemini?/live", "gaise-provider-openai?/live", "gaise-provider-elevenlabs?/live"]

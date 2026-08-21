@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "gaise-core",
+    "gaise-client",
+    "gaise-provider-ollama",
+    "gaise-provider-openai",
+    "gaise-provider-anthropic",
+    "gaise-provider-gemini",
+    "gaise-provider-vertexai",
+    "gaise-provider-bedrock",
+    "gaise-provider-elevenlabs",
+    "gaise-api",
+    "gaise-chatbot",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.91.1"
+license = "AGPL-3.0-only"
+repository = "https://github.com/ikcore/gaise"
+keywords = ["ai", "llm", "genai", "openai", "anthropic"]
+categories = ["api-bindings", "web-programming"]
+
+[workspace.dependencies]
+# Internal crates
+gaise-core = { package = "gaise", path = "gaise-core", version = "0.2.0" }
+gaise-client = { path = "gaise-client", version = "0.2.0" }
+gaise-provider-ollama = { path = "gaise-provider-ollama", version = "0.2.0" }
+gaise-provider-openai = { path = "gaise-provider-openai", version = "0.2.0" }
+gaise-provider-anthropic = { path = "gaise-provider-anthropic", version = "0.2.0" }
+gaise-provider-gemini = { path = "gaise-provider-gemini", version = "0.2.0" }
+gaise-provider-vertexai = { path = "gaise-provider-vertexai", version = "0.2.0" }
+gaise-provider-bedrock = { path = "gaise-provider-bedrock", version = "0.2.0" }
+gaise-provider-elevenlabs = { path = "gaise-provider-elevenlabs", version = "0.2.0" }
+
+# Shared dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_bytes = "0.11"
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+base64 = "0.22"

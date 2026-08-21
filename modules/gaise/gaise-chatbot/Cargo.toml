@@ -1,0 +1,23 @@
+[package]
+name = "gaise-chatbot"
+description = "Sample CLI chatbot built on GAISe"
+version.workspace = true
+edition = "2021"
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+gaise-core.workspace = true
+gaise-client.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+text_io = "0.1"
+indicatif = "0.17"
+
+[features]
+default = ["ollama"]
+ollama = ["gaise-client/ollama"]

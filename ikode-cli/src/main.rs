@@ -1,24 +1,44 @@
-use clap::{Parser, builder::styling};
-use gaise_core::contracts::{
-    GaiseContent, GaiseInstructRequest, GaiseMessage,
-    GaiseToolCall, OneOrMany, GaiseGenerationConfig
-};
-use gaise_core::GaiseClient;
-use gaise_client::{GaiseClientService, GaiseClientConfig};
-use gaise_client::ServiceAccount;
-use std::io::{self, Write};
-use std::process::Command;
-use std::fs;
-use std::path::{Path, PathBuf};
-use dialoguer::Confirm;
-use anyhow::{Result, anyhow};
-use colored::*;
-use indicatif::{ProgressBar, ProgressStyle};
-use std::time::Duration;
-use uuid::Uuid;
+//! iKode CLI entry point. This file owns only the process boundary: command-line
+//! parsing (clap), provider/model resolution, optional session resume, and the
+//! hand-off to either a one-shot prompt or the interactive REPL.
+//!
+//! Everything else is split across sibling modules that each add behaviour to the
+//! [`App`] aggregate defined in [`app`]:
+//! - [`app`] — `App` + construction, history/session plumbing, permissions,
+//!   and the `ToolHost` implementation.
+//! - [`repl`] — the interactive loop and slash-command dispatch.
+//! - [`turn`] — the agent turn (streaming, tool calls, cancellation).
+//! - [`passes`] — index/enrich/summarise passes, `/compact`, startup sync.
+//! - [`skills_cmd`] — the `/skills` command family.
+//! - [`palette`] / [`keyread`] — the framed prompt editor and raw key reader.
+//! - [`session`] — on-disk transcript persistence.
+//!
+//! Pure, App-free helpers live in the library at [`ikode::util`] so the
+//! integration tests under `tests/` can exercise them directly.
 
-mod tools;
-use tools::*;
+use clap::{builder::styling, Parser, Subcommand};
+use colored::*;
+use std::path::PathBuf;
+
+mod agent;
+mod app;
+mod attach;
+mod clipboard;
+mod document;
+mod goal;
+mod image;
+mod keyread;
+mod palette;
+mod passes;
+mod repl;
+mod session;
+mod skills_cmd;
+mod turn;
+mod visualize;
+
+use app::App;
+use ikode::harness::{self, ProjectConfig};
+use ikode::settings::{Effort, LocalSettings, Mode};
 
 const STYLES: styling::Styles = styling::Styles::styled()
     .header(styling::AnsiColor::Green.on_default().bold())
@@ -28,616 +48,132 @@ const STYLES: styling::Styles = styling::Styles::styled()
 
 #[derive(Parser, Debug)]
 #[command(
-    author, 
-    version, 
-    about = "ikode: A CLI coding agent", 
-    long_about = "A powerful CLI coding agent that assists with development tasks, manages todos, and executes commands.",
+    author,
+    version,
+    about = "ikode: A CLI coding agent",
+    long_about = "A powerful CLI coding agent that indexes code and markdown, manages todos, and executes commands.",
     styles = STYLES
 )]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     #[arg(short, long, help = "The prompt to process")]
     prompt: Option<String>,
 
-    #[arg(short, long, default_value = "openai::gpt-4o", help = "The model to use")]
-    model: String,
+    #[arg(
+        short = 'i',
+        long = "image",
+        value_name = "PATH",
+        action = clap::ArgAction::Append,
+        help = "Attach an image to the first prompt (repeatable)"
+    )]
+    images: Vec<String>,
 
-    #[arg(short, long, default_value_t = false, help = "Whether to use brave mode (no confirmation for commands)")]
+    #[arg(
+        short = 'a',
+        long = "attach",
+        value_name = "PATH",
+        action = clap::ArgAction::Append,
+        help = "Attach an image or document to the first prompt (repeatable)"
+    )]
+    attachments: Vec<String>,
+
+    #[arg(
+        short,
+        long,
+        help = "The chat model to use (overrides config; default openai::gpt-5.6-luna)"
+    )]
+    model: Option<String>,
+
+    #[arg(
+        long,
+        value_name = "LEVEL",
+        help = "Reasoning effort for this session: auto, low, medium, high, max, or ultra"
+    )]
+    effort: Option<String>,
+
+    #[arg(
+        short = 'e',
+        long = "emodel",
+        help = "The embedding model to use (overrides config; default openai::text-embedding-3-small)"
+    )]
+    embedding_model: Option<String>,
+
+    #[arg(
+        short = 's',
+        long = "smodel",
+        help = "The summary model to use for summarisation passes (overrides config; default openai::chat-5.6-luna)"
+    )]
+    summary_model: Option<String>,
+
+    #[arg(
+        short,
+        long,
+        default_value_t = false,
+        help = "Whether to use brave mode (no confirmation for commands)"
+    )]
     brave: bool,
 
     #[arg(short, long, help = "Path to a guide file")]
     guide: Option<String>,
 
-    #[arg(long, default_value_t = 80, help = "Maximum number of history messages sent per request")]
-    max_history: usize,
+    #[arg(
+        long,
+        help = "Maximum number of history messages sent per request (overrides config; default 80)"
+    )]
+    max_history: Option<usize>,
 
-    #[arg(long, default_value_t = 4, help = "Number of early messages to always keep for cache stability")]
-    prefix_keep: usize,
+    #[arg(
+        long,
+        help = "Number of early messages to always keep for cache stability (overrides config; default 4)"
+    )]
+    prefix_keep: Option<usize>,
+
+    #[arg(
+        long = "continue",
+        default_value_t = false,
+        help = "Resume the most recent session in this project"
+    )]
+    resume_latest: bool,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Skip configured startup indexing and the interactive startup sync check"
+    )]
+    no_index: bool,
+
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Disable graph/index retrieval and run as a traditional file/shell harness"
+    )]
+    no_graph: bool,
+
+    #[arg(
+        long,
+        value_name = "ID",
+        help = "Resume a session by id (or unique prefix)"
+    )]
+    resume: Option<String>,
 }
 
-struct Todo {
-    id: usize,
-    task: String,
-    completed: bool,
-}
-
-struct App {
-    client: Box<dyn GaiseClient>,
-    history: Vec<GaiseMessage>,
-    todos: Vec<Todo>,
-    model: String,
-    brave: bool,
-    system_prompt: String,
-    session_cache_key: String,
-    working_directory: PathBuf,
-    max_history: usize,
-    prefix_keep: usize,
-}
-
-impl App {
-    fn new(model: String, brave: bool, guide_path: Option<String>, max_history: usize, prefix_keep: usize) -> Result<Self> {
-        let mut config = GaiseClientConfig::default();
-
-        if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
-            config.openai_api_key = Some(api_key);
-        }
-        if let Ok(api_url) = std::env::var("OPENAI_API_URL") {
-            config.openai_api_url = Some(api_url);
-        }
-        if let Ok(ollama_url) = std::env::var("OLLAMA_URL") {
-            config.ollama_url = Some(ollama_url);
-        }
-        
-        if let Ok(region) = std::env::var("AWS_REGION") {
-            config.bedrock_region = Some(region);
-        }
-
-        if let Ok(api_url) = std::env::var("VERTEXAI_API_URL") {
-            config.vertexai_api_url = Some(api_url);
-        }
-
-        if let Ok(sa_path) = std::env::var("VERTEXAI_SA_PATH") {
-            if let Ok(sa_content) = std::fs::read_to_string(sa_path) {
-                if let Ok(sa) = serde_json::from_str::<serde_json::Value>(&sa_content) {
-                   // Map serde_json::Value to ServiceAccount if it matches
-                   if let (Some(pk), Some(email)) = (sa["private_key"].as_str(), sa["client_email"].as_str()) {
-                       config.vertexai_sa = Some(ServiceAccount {
-                           private_key: pk.to_string(),
-                           client_email: email.to_string(),
-                       });
-                   }
-                }
-            }
-        }
-        // VertexAI and others can be added as needed
-
-        let client = GaiseClientService::new(config);
-
-        let system_prompt_raw = include_str!("sys-prompt.md");
-        let mut system_prompt = Self::format_system_prompt(system_prompt_raw);
-
-        // Check for ikode.md
-        if let Ok(content) = fs::read_to_string("ikode.md") {
-            system_prompt.push_str("\n\nUser Project Guidelines (from ikode.md):\n");
-            system_prompt.push_str(&content);
-        }
-
-        // Check for guide argument
-        if let Some(path) = guide_path {
-            match fs::read_to_string(&path) {
-                Ok(content) => {
-                    system_prompt.push_str(&format!("\n\nUser Guidelines (from {}):\n", path));
-                    system_prompt.push_str(&content);
-                },
-                Err(e) => eprintln!("{} Warning: Could not read guide file {}: {}", "⚠️".yellow(), path, e),
-            }
-        }
-
-        let working_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-
-        Ok(Self {
-            client: Box::new(client),
-            history: vec![GaiseMessage {
-                role: "system".to_string(),
-                content: Some(OneOrMany::One(GaiseContent::Text { text: system_prompt.clone() })),
-                tool_calls: None,
-                tool_call_id: None,
-            }],
-            todos: Vec::new(),
-            model,
-            brave,
-            system_prompt,
-            session_cache_key: Uuid::new_v4().to_string(),
-            working_directory,
-            max_history,
-            prefix_keep,
-        })
-    }
-
-    fn format_system_prompt(raw: &str) -> String {
-        let wd = std::env::current_dir().unwrap_or_default().to_string_lossy().to_string();
-        let platform = std::env::consts::OS;
-        let os_version = "Unknown";
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let is_git = Path::new(".git").exists();
-
-        raw.replace("__WORKING_DIRECTORY__", &wd)
-           .replace("__PLATFORM__", platform)
-           .replace("__OS_VERSION__", os_version)
-           .replace("__TODAY_DATE__", &today)
-           .replace("__IS_GIT_REPO__", if is_git { "Yes" } else { "No" })
-    }
-
-    fn build_request_history(&self) -> Vec<GaiseMessage> {
-        if self.max_history == 0 {
-            return self.history.clone();
-        }
-
-        let total = self.history.len();
-        if total <= self.max_history {
-            return self.history.clone();
-        }
-
-        let mut result = Vec::with_capacity(self.max_history);
-
-        let prefix_end = (1 + self.prefix_keep).min(total);
-        result.extend_from_slice(&self.history[..prefix_end]);
-
-        let tail_count = self.max_history.saturating_sub(prefix_end);
-        let tail_start = total.saturating_sub(tail_count);
-
-        if tail_start > prefix_end {
-            result.push(GaiseMessage {
-                role: "system".to_string(),
-                content: Some(OneOrMany::One(GaiseContent::Text {
-                    text: format!(
-                        "[Note: {} earlier messages were truncated to save context. The conversation continues below.]",
-                        tail_start - prefix_end
-                    ),
-                })),
-                tool_calls: None,
-                tool_call_id: None,
-            });
-        }
-
-        let actual_tail_start = tail_start.max(prefix_end);
-        result.extend_from_slice(&self.history[actual_tail_start..]);
-
-        result
-    }
-
-    fn validate_path(&self, path: &str) -> Result<PathBuf> {
-        let requested_path = Path::new(path);
-        let canonical_path = if requested_path.is_absolute() {
-            requested_path.canonicalize().unwrap_or_else(|_| requested_path.to_path_buf())
-        } else {
-            self.working_directory.join(requested_path)
-                .canonicalize()
-                .unwrap_or_else(|_| self.working_directory.join(requested_path))
-        };
-
-        if !canonical_path.starts_with(&self.working_directory) {
-            return Err(anyhow!(
-                "Path '{}' is outside the working directory. For security reasons, file operations are restricted to the working directory and its subdirectories.",
-                path
-            ));
-        }
-
-        Ok(canonical_path)
-    }
-
-
-    fn clear_screen() {
-        if cfg!(windows) {
-            let _ = Command::new("cmd").args(["/c", "cls"]).status();
-        } else {
-            let _ = Command::new("clear").status();
-        }
-    }
-
-    async fn run_loop(&mut self) -> Result<()> {
-        println!("{}", "✨ Welcome to iKode! Your AI coding assistant..".bright_cyan().bold());
-        println!("{}", "Type '/help' for a list of commands, or '/exit' to quit.\n".dimmed());
-
-        loop {
-            print!("{}", "> ".bright_blue().bold());
-            io::stdout().flush()?;
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-            let input = input.trim();
-
-            if input.is_empty() {
-                continue;
-            }
-
-            if input == "/exit" {
-                println!("{}", "👋 Goodbye!".bright_yellow());
-                break;
-            }
-            if input == "/help" {
-                println!("{}", "\nAvailable commands:".bright_green().bold());
-                println!("  {} - Display this help message", "/help".cyan());
-                println!("  {} - Display the current model", "/model".cyan());
-                println!("  {} {{model}} - Switch to a different model", "/model".cyan());
-                println!("  {} - Show history settings and stats", "/history".cyan());
-                println!("  {} {{n}} - Set max history messages (0 = unlimited)", "/max-history".cyan());
-                println!("  {} {{n}} - Set number of prefix messages to always keep", "/prefix-keep".cyan());
-                println!("  {} - Reset the conversation history", "/clear".cyan());
-                println!("  {} - Clear the terminal screen", "/cls".cyan());
-                println!("  {} - Quit the interactive session\n", "/exit".cyan());
-                continue;
-            }
-            if input == "/cls" || input == "/clear_screen" {
-                Self::clear_screen();
-                continue;
-            }
-            if input == "/clear" {
-                self.history = vec![GaiseMessage {
-                    role: "system".to_string(),
-                    content: Some(OneOrMany::One(GaiseContent::Text { text: self.system_prompt.clone() })),
-                    tool_calls: None,
-                    tool_call_id: None,
-                }];
-                self.session_cache_key = Uuid::new_v4().to_string();
-                println!("{}", "🧹 History cleared.".bright_cyan());
-                continue;
-            }
-            if input == "/model" {
-                println!("{} Current model: {}", "🤖".bright_blue(), self.model.bright_magenta().bold());
-                continue;
-            }
-            if input.starts_with("/model ") {
-                let new_model = input.trim_start_matches("/model ").trim();
-                if !new_model.is_empty() {
-                    self.model = new_model.to_string();
-                    println!("{} Model changed to: {}", "✅".bright_green(), self.model.bright_magenta().bold());
-                } else {
-                    println!("{} Please specify a model name. Usage: /model {{model_name}}", "⚠️".bright_yellow());
-                }
-                continue;
-            }
-
-            if input == "/history" {
-                let limit_display = if self.max_history == 0 {
-                    "unlimited".to_string()
-                } else {
-                    self.max_history.to_string()
-                };
-                println!("{} History settings:", "📊".bright_blue());
-                println!("  Max messages per request: {}", limit_display.bright_magenta().bold());
-                println!("  Prefix keep:              {}", self.prefix_keep.to_string().bright_magenta().bold());
-                println!("  Total messages stored:    {}", self.history.len().to_string().bright_magenta().bold());
-                continue;
-            }
-            if input.starts_with("/max-history ") {
-                let value = input.trim_start_matches("/max-history ").trim();
-                match value.parse::<usize>() {
-                    Ok(n) => {
-                        self.max_history = n;
-                        let display = if n == 0 { "unlimited".to_string() } else { n.to_string() };
-                        println!("{} Max history set to: {}", "✅".bright_green(), display.bright_magenta().bold());
-                    }
-                    Err(_) => println!("{} Invalid number. Usage: /max-history {{number}}", "⚠️".bright_yellow()),
-                }
-                continue;
-            }
-            if input.starts_with("/prefix-keep ") {
-                let value = input.trim_start_matches("/prefix-keep ").trim();
-                match value.parse::<usize>() {
-                    Ok(n) => {
-                        self.prefix_keep = n;
-                        println!("{} Prefix keep set to: {}", "✅".bright_green(), n.to_string().bright_magenta().bold());
-                    }
-                    Err(_) => println!("{} Invalid number. Usage: /prefix-keep {{number}}", "⚠️".bright_yellow()),
-                }
-                continue;
-            }
-
-            self.process_prompt(input).await?;
-        }
-        Ok(())
-    }
-
-    async fn process_prompt(&mut self, prompt: &str) -> Result<()> {
-        self.history.push(GaiseMessage {
-            role: "user".to_string(),
-            content: Some(OneOrMany::One(GaiseContent::Text { text: prompt.to_string() })),
-            tool_calls: None,
-            tool_call_id: None,
-        });
-
-        loop {
-            let mut generation_config = None;
-            if self.model.starts_with("openai::gpt-5") {
-                generation_config = Some(GaiseGenerationConfig {
-                    cache_key: Some(self.session_cache_key.clone()),
-                    ..Default::default()
-                });
-            }
-
-            let request = GaiseInstructRequest {
-                input: OneOrMany::Many(self.build_request_history()),
-                model: self.model.clone(),
-                tools: Some(tools::get_tools()),
-                generation_config,
-                ..Default::default()
-            };
-
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(ProgressStyle::default_spinner()
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
-                .template("{spinner:.green} {msg}")?);
-            pb.set_message("Thinking...");
-            pb.enable_steady_tick(Duration::from_millis(100));
-
-            let response = self.client.instruct(&request).await;
-            pb.finish_and_clear();
-            let response = response.map_err(|e| anyhow!("{}", e))?;
-            
-            let assistant_messages = match response.output {
-                OneOrMany::One(m) => vec![m],
-                OneOrMany::Many(ms) => ms,
-            };
-
-            for assistant_message in assistant_messages {
-                self.history.push(assistant_message.clone());
-
-                if let Some(content) = &assistant_message.content {
-                    match content {
-                        OneOrMany::One(GaiseContent::Text { text }) => {
-                            println!("{}", text);
-                        }
-                        OneOrMany::Many(parts) => {
-                            for part in parts {
-                                if let GaiseContent::Text { text } = part {
-                                    println!("{}", text);
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-
-                if let Some(tool_calls) = assistant_message.tool_calls {
-                    for tool_call in tool_calls {
-                        let result = self.handle_tool_call(&tool_call).await?;
-                        self.history.push(GaiseMessage {
-                            role: "tool".to_string(),
-                            content: Some(OneOrMany::One(GaiseContent::Text { text: result })),
-                            tool_calls: None,
-                            tool_call_id: Some(tool_call.id.clone()),
-                        });
-                    }
-                } else {
-                    return Ok(());
-                }
-            }
-        }
-    }
-
-    async fn handle_tool_call(&mut self, tool_call: &GaiseToolCall) -> Result<String> {
-        let name = &tool_call.function.name;
-        let arguments = &tool_call.function.arguments;
-
-        println!("{} Calling tool: {}", "🛠️".bright_yellow(), name.bright_magenta().bold());
-
-        match name.as_str() {
-            "todo_add" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: TodoAddArgs = serde_json::from_str(args_str)?;
-                for task in args.tasks {
-                    println!("{} Adding task: {}", "📝".bright_blue(), task.bright_blue());
-                    let id = self.todos.len() + 1;
-                    self.todos.push(Todo { id, task, completed: false });
-                }
-                Ok("Tasks added.".to_string())
-            }
-            "todo_insert" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: TodoInsertArgs = serde_json::from_str(args_str)?;
-                
-                let index = self.todos.iter().position(|t| t.id == args.before_id).unwrap_or(self.todos.len());
-                println!("{} Inserting task: {} before ID {}", "📝".bright_blue(), args.task.bright_blue(), args.before_id);
-                
-                self.todos.insert(index, Todo { id: 0, task: args.task, completed: false });
-                
-                // Re-ID todos
-                for (i, todo) in self.todos.iter_mut().enumerate() {
-                    todo.id = i + 1;
-                }
-                
-                // Return updated list as string
-                let mut list = String::new();
-                for todo in &self.todos {
-                    let status = if todo.completed { "✅ completed" } else { "⏳ pending" };
-                    list.push_str(&format!("{}) {} ({})\n", todo.id, todo.task, status));
-                }
-                Ok(if list.is_empty() { "No tasks.".to_string() } else { list })
-            }
-            "todo_complete" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: TodoCompleteArgs = serde_json::from_str(args_str)?;
-                for id in args.ids {
-                    if let Some(todo) = self.todos.iter_mut().find(|t| t.id == id) {
-                        println!("{} Completed task: {}", "✅".bright_green(), todo.task.bright_green());
-                        todo.completed = true;
-                    }
-                }
-                Ok("Tasks marked as complete.".to_string())
-            }
-            "todo_list" => {
-                let mut list = String::new();
-                for todo in &self.todos {
-                    let status = if todo.completed { "✅ completed" } else { "⏳ pending" };
-                    list.push_str(&format!("{}) {} ({})\n", todo.id, todo.task, status));
-                }
-                if list.is_empty() {
-                    Ok("No tasks.".to_string())
-                } else {
-                    Ok(list)
-                }
-            }
-            "execute_command" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: ExecuteCommandArgs = serde_json::from_str(args_str)?;
-                println!("{} Executing: {}", "🚀".bright_magenta(), args.command.bright_magenta());
-
-                if !self.brave {
-                    let prompt = format!("{} Execute command: {}?", "❓".bright_yellow(), args.command.cyan());
-                    if !Confirm::new().with_prompt(prompt).interact()? {
-                        return Ok("Command cancelled by user.".to_string());
-                    }
-                }
-
-                let output = if cfg!(target_os = "windows") {
-                    Command::new("cmd").args(["/C", &args.command]).output()?
-                } else {
-                    Command::new("sh").args(["-c", &args.command]).output()?
-                };
-
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Ok(format!("STDOUT:\n{}\nSTDERR:\n{}", stdout, stderr))
-            }
-            "read_file" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: ReadFileArgs = serde_json::from_str(args_str)?;
-                println!("{} Reading file: {}", "📖".bright_cyan(), args.path.bold().bright_cyan());
-
-                match self.validate_path(&args.path) {
-                    Ok(validated_path) => {
-                        let metadata = match fs::metadata(&validated_path) {
-                            Ok(m) => m,
-                            Err(e) => return Ok(format!("Error reading file: {}", e)),
-                        };
-
-                        const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
-                        if metadata.len() > MAX_FILE_SIZE {
-                            return Ok(format!(
-                                "Error: file is too large ({:.1} MB). Maximum supported size is {:.0} MB.",
-                                metadata.len() as f64 / (1024.0 * 1024.0),
-                                MAX_FILE_SIZE as f64 / (1024.0 * 1024.0)
-                            ));
-                        }
-
-                        let content = match fs::read_to_string(&validated_path) {
-                            Ok(c) => c,
-                            Err(e) => return Ok(format!("Error reading file: {}", e)),
-                        };
-
-                        let total_lines = content.lines().count();
-                        let offset = args.offset.unwrap_or(1).max(1);
-                        let limit = args.limit.unwrap_or(2000);
-
-                        let selected: Vec<String> = content
-                            .lines()
-                            .enumerate()
-                            .skip(offset - 1)
-                            .take(limit)
-                            .map(|(i, line)| format!("{:>6}\t{}", i + 1, line))
-                            .collect();
-
-                        let mut result = selected.join("\n");
-
-                        let last_shown = (offset - 1 + selected.len()).min(total_lines);
-                        if last_shown < total_lines {
-                            result.push_str(&format!(
-                                "\n\n... ({} more lines not shown. Use offset={} to continue reading.)",
-                                total_lines - last_shown,
-                                last_shown + 1
-                            ));
-                        }
-
-                        Ok(result)
-                    }
-                    Err(e) => Ok(format!("Error: {}", e)),
-                }
-            }
-            "edit_file" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: EditFileArgs = serde_json::from_str(args_str)?;
-                println!("{} Editing file: {}", "✍️".bright_yellow(), args.path.bold().bright_yellow());
-
-                match self.validate_path(&args.path) {
-                    Ok(validated_path) => {
-                        let content = match fs::read_to_string(&validated_path) {
-                            Ok(c) => c,
-                            Err(e) => return Ok(format!("Error reading file: {}", e)),
-                        };
-
-                        let count = content.matches(&args.old_text).count();
-                        if count == 0 {
-                            return Ok("Error: old_text not found in file. Make sure it matches exactly, including whitespace and indentation.".to_string());
-                        }
-                        if count > 1 {
-                            return Ok(format!("Error: old_text matches {} locations in the file. Provide more surrounding context to make the match unique.", count));
-                        }
-
-                        if !self.brave {
-                            let prompt = format!("{} Edit file {}?", "❓".bright_yellow(), args.path.bold().cyan());
-                            if !Confirm::new().with_prompt(prompt).interact()? {
-                                return Ok("File edit cancelled by user.".to_string());
-                            }
-                        }
-
-                        let new_content = content.replacen(&args.old_text, &args.new_text, 1);
-                        match fs::write(&validated_path, &new_content) {
-                            Ok(_) => Ok("File updated successfully.".to_string()),
-                            Err(e) => Ok(format!("Error writing file: {}", e)),
-                        }
-                    }
-                    Err(e) => Ok(format!("Error: {}", e)),
-                }
-            }
-            "create_file" => {
-                let args_str = arguments.as_deref().unwrap_or("{}");
-                let args: CreateFileArgs = serde_json::from_str(args_str)?;
-                println!("{} Creating file: {}", "📄".bright_green(), args.path.bold().bright_green());
-
-                match self.validate_path(&args.path) {
-                    Ok(validated_path) => {
-                        if validated_path.exists() {
-                            return Ok(format!("Error: file '{}' already exists. Use edit_file to modify existing files.", args.path));
-                        }
-
-                        if !self.brave {
-                            let prompt = format!("{} Create file {}?", "❓".bright_yellow(), args.path.bold().cyan());
-                            if !Confirm::new().with_prompt(prompt).interact()? {
-                                return Ok("File creation cancelled by user.".to_string());
-                            }
-                        }
-
-                        if let Some(parent) = validated_path.parent() {
-                            if !parent.exists() {
-                                if let Err(e) = fs::create_dir_all(parent) {
-                                    return Ok(format!("Error creating directories: {}", e));
-                                }
-                            }
-                        }
-
-                        match fs::write(&validated_path, &args.content) {
-                            Ok(_) => Ok("File created successfully.".to_string()),
-                            Err(e) => Ok(format!("Error creating file: {}", e)),
-                        }
-                    }
-                    Err(e) => Ok(format!("Error: {}", e)),
-                }
-            }
-            _ => Ok(format!("Unknown tool: {}", name)),
-        }
-    }
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Scaffold the .ikode/ project folder (ikode.md, config.toml, .gitignore entries)
+    Init,
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args()
         .map(|arg| {
             if arg.starts_with('—') {
                 let suffix = &arg['—'.len_utf8()..];
                 if suffix.chars().count() == 1 {
-                    // Replace em dash with single hyphen for short flags (e.g., —m -> -m)
                     format!("-{}", suffix)
                 } else {
-                    // Replace em dash with double hyphen for long flags or just being safe
                     format!("--{}", suffix)
                 }
             } else {
@@ -647,13 +183,250 @@ async fn main() -> Result<()> {
         .collect();
 
     let args = Args::parse_from(args);
-    let mut app = App::new(args.model, args.brave, args.guide, args.max_history, args.prefix_keep)?;
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let project_root = harness::find_project_root(&cwd);
+
+    if let Some(Commands::Init) = args.command {
+        return harness::run_init(&project_root);
+    }
+
+    // Load `.env` (and `.ikode/.env`) into the environment before any provider keys
+    // are read in `App::new`. Files under `.ikode/` are explicit project config and
+    // override inherited environment variables; root-level `.env`/`.ikenv` never
+    // clobber the real environment. Only filenames are printed — never values.
+    let loaded_env = harness::load_dotenv(&project_root);
+    if !loaded_env.is_empty() {
+        println!(
+            "{} Loaded environment from {}",
+            "🔑".bright_blue(),
+            loaded_env.join(", ")
+        );
+    }
+
+    // Layered model/setting resolution, highest precedence first:
+    //   CLI flags > .ikode/settings.local.json > .ikode/config.toml > global > default.
+    let config = ProjectConfig::resolve(&project_root);
+    let mut settings = LocalSettings::load(&project_root);
+    let local_chat = settings.models.as_ref().and_then(|m| m.chat.clone());
+    let local_embed = settings.models.as_ref().and_then(|m| m.embedding.clone());
+    let local_summary = settings.models.as_ref().and_then(|m| m.summary.clone());
+    let model = args
+        .model
+        .or(local_chat)
+        .or(config.model)
+        .unwrap_or_else(|| "openai::gpt-5.6-luna".to_string());
+    let embedding_model = args
+        .embedding_model
+        .or(local_embed)
+        .or(config.embedding_model)
+        .unwrap_or_else(|| "openai::text-embedding-3-small".to_string());
+    // Summary model defaults to chat-5.6-luna when unset.
+    let summary_model = args
+        .summary_model
+        .or(local_summary)
+        .or(config.summary_model)
+        .unwrap_or_else(|| "openai::chat-5.6-luna".to_string());
+    let brave = args.brave || config.brave.unwrap_or(false);
+    // `--brave` is a session-level "yolo" switch: it forces the mode regardless of
+    // what the local settings file says, without persisting the change.
+    if brave {
+        settings.mode = Mode::Yolo;
+    }
+    if let Some(effort) = parse_effort_override(args.effort.as_deref())? {
+        settings.effort = effort;
+    }
+    let max_history = args.max_history.or(config.max_history).unwrap_or(80);
+    let prefix_keep = args.prefix_keep.or(config.prefix_keep).unwrap_or(4);
+    let graph_enabled = config.graph_enabled.unwrap_or(true) && !args.no_graph;
+    let auto_index = graph_enabled && config.auto_index.unwrap_or(false) && !args.no_index;
+
+    // Web research posture, decided once at startup: resolve the search backend
+    // from config + environment, and scan for an installed Chromium-family
+    // browser (Chrome/Edge/Chromium/Brave — Windows, macOS, and Linux locations)
+    // to power headless JavaScript rendering in web fetches.
+    let browser = ikode::web::chrome::discover();
+    match &browser {
+        Some(path) => println!(
+            "{} Chrome found: {} — JavaScript rendering enabled for web fetches.",
+            "🌐".bright_cyan(),
+            path.display().to_string().cyan()
+        ),
+        None => println!(
+            "{} Chrome could not be found — web fetches will read static HTML only.",
+            "🌐".bright_yellow()
+        ),
+    }
+    // Fetching needs no credential, so web research is always available; a
+    // missing search backend only degrades it to fetch-only (explicit URLs).
+    let env_lookup = |name: &str| std::env::var(name).ok();
+    let backend = ikode::web::SearchBackend::resolve(
+        config.web_search_backend.as_deref(),
+        config.web_search_endpoint.as_deref(),
+        &env_lookup,
+    );
+    let web = ikode::web::WebConfig {
+        backend: backend.as_ref().ok().cloned(),
+        browser,
+        max_searches: config
+            .web_max_searches
+            .unwrap_or(ikode::web::DEFAULT_MAX_SEARCHES),
+        max_fetches: config
+            .web_max_fetches
+            .unwrap_or(ikode::web::DEFAULT_MAX_FETCHES),
+    };
+    match backend {
+        Ok(_) => println!(
+            "{} Web research enabled ({}).",
+            "🔎".bright_cyan(),
+            web.describe()
+        ),
+        Err(reason) => println!(
+            "{} Web research: fetch-only — pages at explicit URLs can be read, but searching is off ({reason}).",
+            "🔎".bright_yellow()
+        ),
+    }
+    let web_config = Some(web);
+
+    let mut app = App::new(
+        model,
+        embedding_model,
+        summary_model,
+        brave,
+        args.guide,
+        max_history,
+        prefix_keep,
+        project_root,
+        graph_enabled,
+        settings,
+        web_config,
+    )?;
+
+    app.reload_mcp().await;
+    app.print_mcp_startup_status();
+
+    for path in &args.images {
+        let image = image::load_image(path, &app.working_directory)
+            .map_err(|error| anyhow::anyhow!("--image {path}: {error}"))?;
+        app.pending_images.push(image);
+    }
+    for path in &args.attachments {
+        match image::load_image(path, &app.working_directory) {
+            Ok(image) => app.pending_images.push(image),
+            Err(error) if image::has_supported_extension(path) => {
+                anyhow::bail!("--attach {path}: {error}");
+            }
+            Err(_) => {
+                let document = document::load_document(path, &app.working_directory)
+                    .map_err(|error| anyhow::anyhow!("--attach {path}: {error}"))?;
+                if let Some(error) = document.support_error(&app.model) {
+                    anyhow::bail!("--attach {path}: {error}");
+                }
+                app.pending_documents.push(document);
+            }
+        }
+    }
+
+    // Resume a prior session if requested (--continue = latest, --resume <id> = specific).
+    let resume_dir = app.working_directory.clone();
+    if let Some(id) = args.resume.as_ref() {
+        let infos = session::list_sessions(&resume_dir);
+        match session::match_session(&infos, id) {
+            session::SessionMatch::Unique(info) => app.load_session(info)?,
+            session::SessionMatch::None => {
+                anyhow::bail!("no session matching '{id}'")
+            }
+            session::SessionMatch::Ambiguous(matches) => {
+                let ids = matches
+                    .iter()
+                    .map(|info| info.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                anyhow::bail!("session prefix '{id}' is ambiguous; matches: {ids}")
+            }
+        }
+    } else if args.resume_latest {
+        match session::list_sessions(&resume_dir).first() {
+            Some(info) => app.load_session(info)?,
+            None => println!("{} No session to continue.", "•".dimmed()),
+        }
+    }
+
+    if auto_index {
+        app.run_index();
+    }
 
     if let Some(prompt) = args.prompt {
         app.process_prompt(&prompt).await?;
     } else {
-        app.run_loop().await?;
+        app.run_loop(auto_index || args.no_index || !graph_enabled)
+            .await?;
     }
 
     Ok(())
+}
+
+fn parse_effort_override(raw: Option<&str>) -> anyhow::Result<Option<Effort>> {
+    raw.map(|value| {
+        Effort::parse(value).ok_or_else(|| {
+            anyhow::anyhow!("invalid effort '{value}'; expected auto|low|medium|high|max|ultra")
+        })
+    })
+    .transpose()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_effort_flag_reaches_the_validated_override() {
+        let args = Args::try_parse_from(["ikode", "--effort", "med"]).unwrap();
+        assert_eq!(
+            parse_effort_override(args.effort.as_deref()).unwrap(),
+            Some(Effort::Medium)
+        );
+        assert_eq!(parse_effort_override(None).unwrap(), None);
+        assert_eq!(
+            parse_effort_override(Some("ULTRA")).unwrap(),
+            Some(Effort::Ultra)
+        );
+    }
+
+    #[test]
+    fn cli_accepts_repeatable_image_and_generic_attachment_paths() {
+        let args = Args::try_parse_from([
+            "ikode",
+            "--image",
+            "one.png",
+            "-i",
+            "two.jpg",
+            "--attach",
+            "report.pdf",
+            "-a",
+            "notes.md",
+            "--prompt",
+            "review these",
+        ])
+        .unwrap();
+
+        assert_eq!(args.images, ["one.png", "two.jpg"]);
+        assert_eq!(args.attachments, ["report.pdf", "notes.md"]);
+        assert_eq!(args.prompt.as_deref(), Some("review these"));
+    }
+
+    #[test]
+    fn cli_effort_override_rejects_unknown_or_missing_values() {
+        let error = parse_effort_override(Some("warp-speed")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("expected auto|low|medium|high|max|ultra"));
+        assert!(Args::try_parse_from(["ikode", "--effort"]).is_err());
+    }
+
+    #[test]
+    fn cli_accepts_session_only_graph_disable_override() {
+        let args = Args::try_parse_from(["ikode", "--no-graph"]).unwrap();
+        assert!(args.no_graph);
+    }
 }

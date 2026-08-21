@@ -1,0 +1,3123 @@
+{
+	"info": {
+		"_postman_id": "8d8f6385-2e6a-4b6e-8d51-4e78c8d8c2c8",
+		"name": "GAISe API",
+		"description": "GAISe (Generative AI Service) exposes one provider-neutral contract over OpenAI, Anthropic, Google Gemini, Google Vertex AI, Amazon Bedrock, Ollama, and ElevenLabs (text-to-speech).\n\nRoutes: POST /v1/instruct, POST /v1/instruct/stream (SSE), POST /v1/embeddings, GET /v1/models, GET /v1/models/{provider}::{id}, POST /v1/speech, POST /v1/speech/stream (SSE), POST /v1/speech/audio (raw audio), GET /v1/live (WebSocket; not representable here).\n\nSet the collection variables (base_url and one model per vendor) and configure the server with the provider credentials described in wiki/api.md#configuration. Full reference: wiki/README.md.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Models",
+			"description": "Model discovery across every configured provider. Semantics: wiki/capabilities.md#model-discovery; catalog: wiki/models.md.",
+			"item": [
+				{
+					"name": "List all models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							]
+						},
+						"description": "Fans out to every configured provider; per-provider failures are reported in `errors`, never dropped."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter: embedding models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?operation=embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "operation",
+									"value": "embeddings"
+								}
+							]
+						},
+						"description": "operation is one of instruct, instruct_stream, embeddings, live."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter: live models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?operation=live",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "operation",
+									"value": "live"
+								}
+							]
+						},
+						"description": "Models GAISe can drive through GET /v1/live (OpenAI Realtime, Gemini Live)."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter: OpenAI streaming chat",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?provider=openai&operation=instruct_stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "provider",
+									"value": "openai"
+								},
+								{
+									"key": "operation",
+									"value": "instruct_stream"
+								}
+							]
+						},
+						"description": "Provider + operation filter."
+					},
+					"response": []
+				},
+				{
+					"name": "Ollama with /api/show details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?provider=ollama&include_details=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "provider",
+									"value": "ollama"
+								},
+								{
+									"key": "include_details",
+									"value": "true"
+								}
+							]
+						},
+						"description": "One extra call per installed tag; returns capabilities and context length."
+					},
+					"response": []
+				},
+				{
+					"name": "Raw provider records",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?provider=anthropic&include_raw=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "provider",
+									"value": "anthropic"
+								},
+								{
+									"key": "include_raw",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Attaches the provider's native model object as `raw`."
+					},
+					"response": []
+				},
+				{
+					"name": "Limits matrix (registry, no credentials)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/limits",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"limits"
+							]
+						},
+						"description": "Every registry entry's documented `context_window`, `max_output_tokens`, `max_input_tokens`, `embedding_dimensions`, and `max_input_characters`, served from the bundled registry without contacting any provider."
+					},
+					"response": []
+				},
+				{
+					"name": "Limits matrix: Anthropic instruct models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/limits?provider=anthropic&operation=instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"limits"
+							],
+							"query": [
+								{
+									"key": "provider",
+									"value": "anthropic"
+								},
+								{
+									"key": "operation",
+									"value": "instruct"
+								}
+							]
+						},
+						"description": "Filters apply to the registry rows; `operation` accepts instruct, instruct_stream, embeddings, speech, live."
+					},
+					"response": []
+				},
+				{
+					"name": "Get one model",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/{{anthropic_model}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"{{anthropic_model}}"
+							]
+						},
+						"description": "Single enriched record; 404 if the provider does not list it, 400 without the :: separator."
+					},
+					"response": []
+				},
+				{
+					"name": "Get one model (Bedrock inference profile)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/{{bedrock_model}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"{{bedrock_model}}"
+							]
+						},
+						"description": "Cross-region profiles inherit the foundation model's capabilities."
+					},
+					"response": []
+				},
+				{
+					"name": "Validation: unknown operation (400)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?operation=teleport",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "operation",
+									"value": "teleport"
+								}
+							]
+						},
+						"description": "Demonstrates query validation."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Instruct",
+			"description": "Provider-neutral request shapes. Swap the model variable to route anywhere. Wire reference: wiki/api.md#post-v1instruct.",
+			"item": [
+				{
+					"name": "Simple instruct",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue?\"\n    }\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": ""
+					},
+					"response": []
+				},
+				{
+					"name": "Multi-turn conversation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a helpful assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the capital of France?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Paris.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And Germany?\"\n      }\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": ""
+					},
+					"response": []
+				},
+				{
+					"name": "Nested ordered parts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"parts\",\n      \"parts\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Compare these two:\"\n        },\n        {\n          \"type\": \"image\",\n          \"data\": [\n            137,\n            80,\n            78,\n            71,\n            13,\n            10,\n            26,\n            10\n          ],\n          \"format\": \"png\"\n        },\n        {\n          \"type\": \"text\",\n          \"text\": \"versus\"\n        },\n        {\n          \"type\": \"image\",\n          \"data\": [\n            137,\n            80,\n            78,\n            71,\n            13,\n            10,\n            26,\n            10\n          ],\n          \"format\": \"png\"\n        }\n      ]\n    }\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": "Adapters flatten nested parts while preserving order."
+					},
+					"response": []
+				},
+				{
+					"name": "Audio input",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Transcribe and summarize this clip.\"\n      },\n      {\n        \"type\": \"audio\",\n        \"data\": [\n          82,\n          73,\n          70,\n          70\n        ],\n        \"format\": \"audio/wav\"\n      }\n    ]\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": "Audio input is native on Gemini/Vertex, OpenAI audio models, and Bedrock where permitted; Anthropic and Ollama return an explicit unsupported marker."
+					},
+					"response": []
+				},
+				{
+					"name": "Generated image (Gemini)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{gemini_image_model}}\",\n  \"generation_config\": {\n    \"response_modalities\": [\n      \"TEXT\",\n      \"IMAGE\"\n    ],\n    \"image_config\": {\n      \"aspect_ratio\": \"16:9\",\n      \"image_size\": \"1K\"\n    }\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Create a watercolor landscape of a fjord at dawn.\"\n    }\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": "Returned bytes arrive as ordinary image content objects."
+					},
+					"response": []
+				},
+				{
+					"name": "Tool handling (full loop)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Weather in Paris?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-1\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"Paris, France\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-1\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":22}\"\n      }\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": ""
+					},
+					"response": []
+				},
+				{
+					"name": "Prompt cache key (OpenAI)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"generation_config\": {\n    \"cache_key\": \"faq-session-42\"\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are the FAQ bot for ACME.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What are your opening hours?\"\n      }\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": "cache_key maps to prompt_cache_key on OpenAI; Anthropic uses automatic ephemeral cache control instead."
+					},
+					"response": []
+				},
+				{
+					"name": "Streaming (SSE)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a limerick about Rust borrow checking.\"\n    }\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct",
+								"stream"
+							]
+						},
+						"description": "Response is text/event-stream."
+					},
+					"response": []
+				},
+				{
+					"name": "Per-request connection override",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							},
+							"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"connection\": {\n    \"api_url\": \"https://api.openai.com/v1\",\n    \"api_key\": \"{{openai_api_key_override}}\"\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Which credentials served this request?\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/instruct",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"instruct"
+							]
+						},
+						"description": "connection.api_url / api_key / region / service_account override the server configuration for this call only. Keys are redacted in server logs."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Embeddings",
+			"description": "Text embeddings. task (document|query|classification|clustering|similarity|code_query|fact_verification|question_answering, aliases such as search_query, or a vendor value passed through), dimensions, and normalize are resolved per model from the registry profile: wire task fields, prompt instructions, local-model prefixes, dimension snapping, and local normalization. wiki/embeddings.md#how-a-request-is-resolved",
+			"item": [
+				{
+					"name": "Single embedding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{ollama_embedding_model}}\",\n  \"input\": \"The quick brown fox jumps over the lazy dog.\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": ""
+					},
+					"response": []
+				},
+				{
+					"name": "Batch embeddings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{openai_embedding_model}}\",\n  \"input\": [\n    \"First document\",\n    \"Second document\",\n    \"Third document\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": ""
+					},
+					"response": []
+				},
+				{
+					"name": "Index documents (task=document, 768 dims)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{gemini_embedding_model}}\",\n  \"task\": \"document\",\n  \"dimensions\": 768,\n  \"input\": [\n    \"GAISe maps one contract onto many providers.\",\n    \"Embeddings turn text into vectors.\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": "Embed corpus text with task=document; dimensions requests Matryoshka truncation where the model supports it."
+					},
+					"response": []
+				},
+				{
+					"name": "Search query (task=query)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{gemini_embedding_model}}\",\n  \"task\": \"query\",\n  \"dimensions\": 768,\n  \"input\": \"how does gaise route providers?\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": "Embed the query side with task=query — Gemini/Vertex taskType and Cohere input_type differ between documents and queries."
+					},
+					"response": []
+				},
+				{
+					"name": "Local model query (prefix applied from task)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{ollama_embedding_model}}\",\n  \"task\": \"search_query\",\n  \"input\": \"how does gaise route providers?\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": "On Ollama tags with a documented convention (nomic-embed-text, mxbai-embed-large, qwen3-embedding, snowflake-arctic-embed2, embeddinggemma) GAISe prepends the query prefix or instruction itself; \"search_query\" is an alias of \"query\"."
+					},
+					"response": []
+				},
+				{
+					"name": "Bedrock Cohere query (input_type=search_query)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{bedrock_embedding_model}}\",\n  \"task\": \"query\",\n  \"normalize\": true,\n  \"input\": \"what is the refund policy\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": "task maps to Cohere input_type; normalize requests unit-length vectors (Titan V2 natively, others locally)."
+					},
+					"response": []
+				},
+				{
+					"name": "OpenAI shortened vectors",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{openai_embedding_model}}\",\n  \"dimensions\": 512,\n  \"input\": [\n    \"short vectors for a cheaper index\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/embeddings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"embeddings"
+							]
+						},
+						"description": "text-embedding-3-* accept dimensions; ada-002 does not (ignored)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Speech",
+			"description": "Text-to-speech via ElevenLabs. Set elevenlabs_voice_id from GET /v2/voices on your account (default voices are account-gated). Reference: wiki/api.md#post-v1speech, wiki/vendor-elevenlabs.md.",
+			"item": [
+				{
+					"name": "Speech (JSON clip)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{elevenlabs_model}}\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"Welcome to GAISe. The build is green.\",\n  \"format\": \"audio/pcm\",\n  \"sample_rate\": 24000,\n  \"language\": \"en\",\n  \"voice_settings\": {\n    \"stability\": 0.5,\n    \"similarity\": 0.75,\n    \"speed\": 1.0\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech"
+							]
+						},
+						"description": "Returns GaiseSpeechResponse: audio byte array, format, sample_rate, usage."
+					},
+					"response": []
+				},
+				{
+					"name": "Speech with alignment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{elevenlabs_model}}\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"Welcome to GAISe. The build is green.\",\n  \"format\": \"audio/pcm\",\n  \"sample_rate\": 24000,\n  \"language\": \"en\",\n  \"voice_settings\": {\n    \"stability\": 0.5,\n    \"similarity\": 0.75,\n    \"speed\": 1.0\n  },\n  \"include_alignment\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech"
+							]
+						},
+						"description": "Adds character timing (alignment.characters/start_seconds/end_seconds)."
+					},
+					"response": []
+				},
+				{
+					"name": "Speech MP3 default",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{elevenlabs_model}}\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"Default format is 44.1 kHz MP3.\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech"
+							]
+						},
+						"description": "Omit format for mp3_44100_128."
+					},
+					"response": []
+				},
+				{
+					"name": "Speech stream (SSE)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{elevenlabs_model}}\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"Welcome to GAISe. The build is green.\",\n  \"format\": \"audio/pcm\",\n  \"sample_rate\": 24000,\n  \"language\": \"en\",\n  \"voice_settings\": {\n    \"stability\": 0.5,\n    \"similarity\": 0.75,\n    \"speed\": 1.0\n  },\n  \"include_alignment\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech",
+								"stream"
+							]
+						},
+						"description": "text/event-stream of audio, alignment, and usage chunks."
+					},
+					"response": []
+				},
+				{
+					"name": "Speech audio (raw bytes)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"{{elevenlabs_model}}\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"Welcome to GAISe. The build is green.\",\n  \"format\": \"audio/pcm\",\n  \"sample_rate\": 24000,\n  \"language\": \"en\",\n  \"voice_settings\": {\n    \"stability\": 0.5,\n    \"similarity\": 0.75,\n    \"speed\": 1.0\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech/audio",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech",
+								"audio"
+							]
+						},
+						"description": "Raw chunked audio body; Content-Type and X-Gaise-Sample-Rate headers. Save the response to a file or pipe to a player."
+					},
+					"response": []
+				},
+				{
+					"name": "Speech eleven_v3",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"elevenlabs::eleven_v3\",\n  \"voice\": \"{{elevenlabs_voice_id}}\",\n  \"input\": \"[cheerful] Hello there! [whispers] This is the v3 model.\",\n  \"format\": \"audio/mpeg\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/speech",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"speech"
+							]
+						},
+						"description": "v3 takes delivery hints as audio tags in the text; max 5,000 characters."
+					},
+					"response": []
+				},
+				{
+					"name": "List ElevenLabs models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?provider=elevenlabs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "provider",
+									"value": "elevenlabs"
+								}
+							]
+						},
+						"description": "GET /v1/models reports speech + live operations per model."
+					},
+					"response": []
+				},
+				{
+					"name": "Filter: speech models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models?operation=speech",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models"
+							],
+							"query": [
+								{
+									"key": "operation",
+									"value": "speech"
+								}
+							]
+						},
+						"description": "Every provider's speech-capable models."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Vendors",
+			"description": "The same request set for each provider. Requires the matching credentials on the server.",
+			"item": [
+				{
+					"name": "OpenAI",
+					"description": "Every route exercised against OpenAI. Model IDs come from collection variables. Mapping details: wiki/vendor-openai.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"correlation_id\": \"openai-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via OpenAI. See wiki/vendor-openai.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "Embeddings",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{openai_embedding_model}}\",\n  \"correlation_id\": \"openai-embed-1\",\n  \"input\": [\n    \"The quick brown fox jumps over the lazy dog.\",\n    \"Pack my box with five dozen liquor jugs.\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/embeddings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"embeddings"
+									]
+								},
+								"description": "Text embeddings. Usage is present only when the provider reports it."
+							},
+							"response": []
+						},
+						{
+							"name": "List OpenAI models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=openai",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "openai"
+										}
+									]
+								},
+								"description": "GET /v1/models for OpenAI only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Anthropic",
+					"description": "Every route exercised against Anthropic. Model IDs come from collection variables. Mapping details: wiki/vendor-anthropic.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"correlation_id\": \"anthropic-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via Anthropic. See wiki/vendor-anthropic.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{anthropic_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "List Anthropic models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=anthropic",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "anthropic"
+										}
+									]
+								},
+								"description": "GET /v1/models for Anthropic only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Gemini",
+					"description": "Every route exercised against Gemini. Model IDs come from collection variables. Mapping details: wiki/vendor-gemini.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"correlation_id\": \"gemini-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via Gemini. See wiki/vendor-gemini.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "Embeddings",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{gemini_embedding_model}}\",\n  \"correlation_id\": \"gemini-embed-1\",\n  \"input\": [\n    \"The quick brown fox jumps over the lazy dog.\",\n    \"Pack my box with five dozen liquor jugs.\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/embeddings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"embeddings"
+									]
+								},
+								"description": "Text embeddings. Usage is present only when the provider reports it."
+							},
+							"response": []
+						},
+						{
+							"name": "List Gemini models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=gemini",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "gemini"
+										}
+									]
+								},
+								"description": "GET /v1/models for Gemini only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Vertex AI",
+					"description": "Every route exercised against Vertex AI. Model IDs come from collection variables. Mapping details: wiki/vendor-vertexai.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"correlation_id\": \"vertexai-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via Vertex AI. See wiki/vendor-vertexai.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "Embeddings",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{vertexai_embedding_model}}\",\n  \"correlation_id\": \"vertexai-embed-1\",\n  \"input\": [\n    \"The quick brown fox jumps over the lazy dog.\",\n    \"Pack my box with five dozen liquor jugs.\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/embeddings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"embeddings"
+									]
+								},
+								"description": "Text embeddings. Usage is present only when the provider reports it."
+							},
+							"response": []
+						},
+						{
+							"name": "List Vertex AI models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=vertexai",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "vertexai"
+										}
+									]
+								},
+								"description": "GET /v1/models for Vertex AI only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Bedrock",
+					"description": "Every route exercised against Bedrock. Model IDs come from collection variables. Mapping details: wiki/vendor-bedrock.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"correlation_id\": \"bedrock-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via Bedrock. See wiki/vendor-bedrock.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "Embeddings",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{bedrock_embedding_model}}\",\n  \"correlation_id\": \"bedrock-embed-1\",\n  \"input\": [\n    \"The quick brown fox jumps over the lazy dog.\",\n    \"Pack my box with five dozen liquor jugs.\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/embeddings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"embeddings"
+									]
+								},
+								"description": "Text embeddings. Usage is present only when the provider reports it."
+							},
+							"response": []
+						},
+						{
+							"name": "List Bedrock models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=bedrock",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "bedrock"
+										}
+									]
+								},
+								"description": "GET /v1/models for Bedrock only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Ollama",
+					"description": "Every route exercised against Ollama. Model IDs come from collection variables. Mapping details: wiki/vendor-ollama.md",
+					"item": [
+						{
+							"name": "Text",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"correlation_id\": \"ollama-text-1\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Why is the sky blue? Answer in two sentences.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Plain text instruct via Ollama. See wiki/vendor-ollama.md."
+							},
+							"response": []
+						},
+						{
+							"name": "System + history",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 512,\n    \"temperature\": 0.7\n  },\n  \"input\": [\n    {\n      \"role\": \"system\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"You are a terse assistant.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Name three noble gases.\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"Helium, neon, argon.\"\n      }\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"And three more?\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Multi-turn conversation with a system instruction. Fixed-sampling families drop temperature automatically."
+							},
+							"response": []
+						},
+						{
+							"name": "Image input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_vision_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Describe this image.\"\n      },\n      {\n        \"type\": \"image\",\n        \"data\": [\n          137,\n          80,\n          78,\n          71,\n          13,\n          10,\n          26,\n          10\n        ],\n        \"format\": \"image/png\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Byte arrays are placeholders. Image support depends on the model; see wiki/capabilities.md#modalities-by-provider."
+							},
+							"response": []
+						},
+						{
+							"name": "File input",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"Summarize the attached notes.\"\n      },\n      {\n        \"type\": \"file\",\n        \"data\": [\n          72,\n          101,\n          108,\n          108,\n          111,\n          32,\n          110,\n          111,\n          116,\n          101,\n          115\n        ],\n        \"name\": \"notes.txt\"\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "UTF-8 text files become tagged text on providers without native documents; PDFs are native on Anthropic, Gemini, Vertex, and Bedrock."
+							},
+							"response": []
+						},
+						{
+							"name": "Reasoning",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"generation_config\": {\n    \"thinking_effort\": \"high\",\n    \"include_thoughts\": true,\n    \"max_tokens\": 4096\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"A bat and a ball cost 1.10 in total. The bat costs 1.00 more than the ball. How much is the ball?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Reasoning controls map per provider (reasoning_effort, adaptive thinking, thinkingLevel/thinkingBudget, think). Accepted values per model are in wiki/models.md."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool call",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"tool_config\": {\n    \"mode\": \"auto\"\n  },\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"What is the weather in London right now?\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Expect an assistant message with tool_calls. Copy id/name into the next request."
+							},
+							"response": []
+						},
+						{
+							"name": "Tool result",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"tools\": [\n    {\n      \"name\": \"get_weather\",\n      \"description\": \"Get the current weather for a city\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\": {\n            \"type\": \"string\",\n            \"description\": \"City and country\"\n          },\n          \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"units\": {\n                \"type\": \"string\",\n                \"description\": \"celsius or fahrenheit\"\n              }\n            }\n          }\n        },\n        \"required\": [\n          \"location\"\n        ]\n      }\n    }\n  ],\n  \"input\": [\n    {\n      \"role\": \"user\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"What is the weather in London right now?\"\n      }\n    },\n    {\n      \"role\": \"assistant\",\n      \"tool_calls\": [\n        {\n          \"id\": \"call-123\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"get_weather\",\n            \"arguments\": \"{\\\"location\\\":\\\"London, UK\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"call-123\",\n      \"tool_name\": \"get_weather\",\n      \"content\": {\n        \"type\": \"text\",\n        \"text\": \"{\\\"temperature_c\\\":18,\\\"sky\\\":\\\"overcast\\\"}\"\n      }\n    }\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct"
+									]
+								},
+								"description": "Replace call-123 with the id from the previous response. tool_name is required for Gemini/Vertex."
+							},
+							"response": []
+						},
+						{
+							"name": "Stream",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_model}}\",\n  \"generation_config\": {\n    \"max_tokens\": 256\n  },\n  \"input\": {\n    \"role\": \"user\",\n    \"content\": {\n      \"type\": \"text\",\n      \"text\": \"Write a haiku about compilers.\"\n    }\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/instruct/stream",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"instruct",
+										"stream"
+									]
+								},
+								"description": "Server-Sent Events; each data: line is a GaiseInstructStreamResponse (text, content, tool_call, usage)."
+							},
+							"response": []
+						},
+						{
+							"name": "Embeddings",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"model\": \"{{ollama_embedding_model}}\",\n  \"correlation_id\": \"ollama-embed-1\",\n  \"input\": [\n    \"The quick brown fox jumps over the lazy dog.\",\n    \"Pack my box with five dozen liquor jugs.\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/v1/embeddings",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"embeddings"
+									]
+								},
+								"description": "Text embeddings. Usage is present only when the provider reports it."
+							},
+							"response": []
+						},
+						{
+							"name": "List Ollama models",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/v1/models?provider=ollama",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"v1",
+										"models"
+									],
+									"query": [
+										{
+											"key": "provider",
+											"value": "ollama"
+										}
+									]
+								},
+								"description": "GET /v1/models for Ollama only; errors propagate as HTTP 500."
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Live (WebSocket)",
+			"description": "GET /v1/live is a WebSocket (server built with --features live) and cannot be sent as an HTTP request here. Use Postman's WebSocket request type: connect to ws://localhost:3000/v1/live, send the GaiseLiveConfig JSON as the first text frame, then GaiseLiveInput frames. First frame example:\n\n{\n  \"model\": \"openai::gpt-realtime-2.1\",\n  \"system_instruction\": \"You are a concise voice assistant.\",\n  \"modalities\": [\n    \"text\",\n    \"audio\"\n  ],\n  \"voice\": \"alloy\",\n  \"transcription\": {\n    \"input\": true,\n    \"output\": true\n  }\n}\n\nThen: {\"type\":\"text\",\"text\":\"Hello\"} … {\"type\":\"close\"}. Protocol: wiki/api.md#get-v1live and wiki/examples.md#live--realtime.\n\nRealtime voice (ElevenLabs): first frame {\"model\":\"elevenlabs::eleven_flash_v2_5\",\"voice\":\"<voice_id>\"} then {\"type\":\"text\",\"text\":\"Hello there \"} frames; receive {\"type\":\"audio\",...} (24 kHz PCM) and {\"type\":\"transcript\",...}; send {\"type\":\"audio_stream_end\"} to flush and {\"type\":\"close\"} to end.",
+			"item": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "openai_model",
+			"value": "openai::gpt-5.6",
+			"type": "string"
+		},
+		{
+			"key": "openai_embedding_model",
+			"value": "openai::text-embedding-3-small",
+			"type": "string"
+		},
+		{
+			"key": "anthropic_model",
+			"value": "anthropic::claude-opus-5",
+			"type": "string"
+		},
+		{
+			"key": "gemini_model",
+			"value": "gemini::gemini-3.6-flash",
+			"type": "string"
+		},
+		{
+			"key": "gemini_image_model",
+			"value": "gemini::gemini-3.1-flash-lite-image",
+			"type": "string"
+		},
+		{
+			"key": "gemini_embedding_model",
+			"value": "gemini::gemini-embedding-2",
+			"type": "string"
+		},
+		{
+			"key": "vertexai_model",
+			"value": "vertexai::gemini-3.5-flash",
+			"type": "string"
+		},
+		{
+			"key": "vertexai_embedding_model",
+			"value": "vertexai::gemini-embedding-2",
+			"type": "string"
+		},
+		{
+			"key": "bedrock_model",
+			"value": "bedrock::global.anthropic.claude-sonnet-5",
+			"type": "string"
+		},
+		{
+			"key": "bedrock_embedding_model",
+			"value": "bedrock::amazon.titan-embed-text-v2:0",
+			"type": "string"
+		},
+		{
+			"key": "ollama_model",
+			"value": "ollama::qwen3:8b",
+			"type": "string"
+		},
+		{
+			"key": "ollama_vision_model",
+			"value": "ollama::gemma4:latest",
+			"type": "string"
+		},
+		{
+			"key": "ollama_embedding_model",
+			"value": "ollama::embeddinggemma:latest",
+			"type": "string"
+		},
+		{
+			"key": "elevenlabs_model",
+			"value": "elevenlabs::eleven_flash_v2_5",
+			"type": "string"
+		},
+		{
+			"key": "elevenlabs_voice_id",
+			"value": "REPLACE_WITH_VOICE_ID",
+			"type": "string"
+		},
+		{
+			"key": "openai_api_key_override",
+			"value": "sk-REPLACE",
+			"type": "string"
+		}
+	]
+}
