@@ -1,14 +1,11 @@
 [workspace]
 resolver = "2"
 
-members = [
-    "ikode-cli",
-    "gaise/gaise-core",
-    "gaise/gaise-client",
-    "gaise/gaise-provider-ollama",
-    "gaise/gaise-provider-openai",
-    "gaise/gaise-provider-vertexai",
-    "gaise/gaise-provider-bedrock",
-]
+members = ["ikode-cli"]
+
+# modules/gaise is its own nested workspace and modules/livec_graph is a
+# standalone crate; both are consumed by ikode-cli as path dependencies rather
+# than as members of this workspace (a workspace cannot nest another).
+exclude = ["modules"]
 
 default-members = ["ikode-cli"]

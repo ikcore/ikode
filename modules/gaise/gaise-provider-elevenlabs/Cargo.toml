@@ -1,0 +1,31 @@
+[package]
+name = "gaise-provider-elevenlabs"
+description = "ElevenLabs provider for GAISe — text-to-speech, streaming speech, and realtime voice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[features]
+default = []
+live = ["dep:tokio-tungstenite", "dep:http", "dep:tungstenite", "dep:tokio-stream"]
+
+[dependencies]
+gaise-core.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+serde_bytes.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+base64.workspace = true
+reqwest = { version = "0.12", features = ["stream", "json"] }
+bytes = "1"
+tokio-tungstenite = { version = "0.26", features = ["native-tls"], optional = true }
+tokio-stream = { version = "0.1", optional = true }
+http = { version = "1", optional = true }
+tungstenite = { version = "0.26", optional = true }

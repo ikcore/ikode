@@ -1,0 +1,36 @@
+# ---------- build stage ----------
+FROM rust:1.93-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    musl-tools \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Apple Silicon musl target
+RUN rustup target add aarch64-unknown-linux-musl
+
+WORKDIR /usr/src/gaise
+COPY . .
+
+# Force static linking
+ENV RUSTFLAGS="-C target-feature=+crt-static"
+
+RUN cargo build --release \
+    --target aarch64-unknown-linux-musl \
+    -p gaise-api \
+    --bin gaise-api
+
+# ---------- runtime stage ----------
+FROM gcr.io/distroless/cc
+
+WORKDIR /app
+
+COPY --from=builder \
+  /usr/src/gaise/target/aarch64-unknown-linux-musl/release/gaise-api \
+  /app/gaise-api
+
+EXPOSE 3000
+ENV GAISE_PORT=3000
+
+USER nonroot:nonroot
+ENTRYPOINT ["/app/gaise-api"]

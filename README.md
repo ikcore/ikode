@@ -1,125 +1,173 @@
-# iKode
+# iKode CLI
 
-[![Rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+iKode is an agentic coding CLI for browsing, editing, and reasoning over code and
+Markdown with a graph-backed index. It supports interactive and one-shot work,
+persisted sessions and goals, provider-independent chat/embeddings, and a local
+code-map visualizer.
 
-iKode is a Rust-based AI coding assistant and generative AI service. It provides a powerful CLI for development tasks and a flexible backend (GAISe) that integrates with multiple AI providers.
+## Requirements
 
-Written by: Ian Knowles<br>
-Project page: [BadAI Project Page](https://badai.company/open-source/ikode)
+- Rust 1.91.1 (pinned in `rust-toolchain.toml`)
+- Credentials for at least one configured provider, or a local Ollama instance
 
-## Project Structure
-
-- **`ikode-cli/`**: The main command-line interface. It acts as a coding agent that can read/edit files, execute commands, and manage tasks.
-- **`gaise/`**: Generative AI Service (GAISe) - a unified interface for AI providers:
-    - `gaise-core`: Shared traits and contracts.
-    - `gaise-client`: Easy-to-use client for interacting with GAISe.
-    - `gaise-provider-*`: Implementations for OpenAI, Anthropic, Ollama, Vertex AI, and AWS Bedrock.
-
-## iKode CLI Features
-
-- 🤖 **Multi-Model Support**: Use OpenAI (GPT-4o, etc.), Anthropic (Claude), Ollama, Vertex AI, or Bedrock.
-- 📁 **File Operations**: Read files with line numbers and line ranges, edit files with surgical search-and-replace, create new files.
-- 🐚 **Command Execution**: Run shell commands with optional user confirmation.
-- 📝 **Todo Management**: Built-in todo list to keep track of agent goals.
-- 📚 **Context Aware**: Automatically includes OS information, working directory, and user guidelines in the system prompt.
-- ⚡ **Token Efficient**: Patch-based edits, file read caps (2000 lines / 10 MB), and cache-friendly history truncation keep costs low.
+Provider settings are read from the environment or from `.env` / `.ikode/.env`.
+Common variables include `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
+`OLLAMA_URL`, `AWS_REGION`, `VERTEXAI_API_URL`, and `VERTEXAI_SA_PATH`.
 
 ## Installation
-
-Ensure you have [Rust](https://rustup.rs/) installed.
 
 ```bash
 cargo install --path ikode-cli
 ```
 
-## Usage
+## Quick start
 
-### Interactive Mode
-Start a chat session with the default model (GPT-4o):
 ```bash
+ikode init
 ikode
 ```
 
-During the interactive session, you can use the following commands:
-- `/help`: Display a list of available commands and their descriptions.
-- `/model`: Display the current model being used.
-- `/model {model_name}`: Switch to a different model (e.g., `/model ollama::llama3`).
-- `/history`: Show history truncation settings and message count.
-- `/max-history {n}`: Set max history messages per request (0 = unlimited).
-- `/prefix-keep {n}`: Set number of early messages to always keep for cache stability.
-- `/clear`: Reset the conversation history.
-- `/cls`: Clear the terminal screen.
-- `/exit`: Quit the interactive session.
+`ikode init` creates the shareable `.ikode/config.toml` and `.ikode/ikode.md`
+project files. Generated indexes, sessions, goals, embeddings, and local permission
+settings remain git-ignored.
 
-### Direct Prompt
-```bash
-ikode --prompt "Refactor src/main.rs to use a more efficient algorithm"
+## Run modes
+
+- `ikode` — interactive REPL
+- `ikode --prompt "do X"` — one-shot run
+- `ikode --model "provider::model"` — select the chat model
+- `ikode --effort low|medium|high|max|ultra` — set session reasoning/delegation effort
+- `ikode --emodel "provider::model"` — select the embedding model
+- `ikode --smodel "provider::model"` — select the summarization model
+- `ikode --continue` or `ikode --resume <id>` — resume a saved session
+- `ikode --no-index` — skip configured startup indexing and sync prompts
+- `ikode --no-graph` — disable graph/index tools for a traditional harness session
+- `ikode --brave` — use yolo mode for this session
+
+## Interactive commands
+
+The prompt offers a searchable slash-command palette. The main command groups are:
+
+- Retrieval/indexing: `/ask`, `/ask-codebase`, `/index`, `/init`, `/enrich`,
+  `/embed`, `/summarize`, `/architecture`, `/relationships`, `/dir-summaries`,
+  `/graph`, `/rebuild`, and `/squash`.
+- Agents, goals, and sessions: `/effort`, `/agent`, `/agents` (`/tasks` alias),
+  `/goal`, `/goals`, `/btw` (`/side` alias), `/fork`, `/resume`, `/history`,
+  `/storage`, `/sessions`, `/compact`, `/clear`, `/max-history`, and `/prefix-keep`.
+- Models, integrations, and permissions: `/model`, `/emodel`, `/smodel`, `/mode`,
+  `/graph on|off`, `/mcp`, `/allow`, and `/deny`. Permission rules support `list`,
+  `remove`, and `clear`; history limits
+  support `save [global]`. Shift+Tab cycles plan, agentic, and yolo modes.
+- Project features: `/skills`, `/visualize [port]`, `/image <path>`, `/document <path>`,
+  generic `/attach <path>`, and `/paste` for clipboard images. Image and document
+  paths can also be dragged into the prompt; one-shot use supports repeatable
+  `--image/-i` and `--attach/-a` flags.
+- Diagnostics/terminal: `/doctor`, `!<command>`, `/cls`, `/help`, and `/exit`.
+
+`/history` reports message, token, transcript, and aggregate session byte usage.
+`/storage` combines session totals with WAL/checkpoint/compression counters.
+`/sessions prune --keep 20` or `--max-bytes 512MiB` produces a dry-run; add
+`--apply` to remove eligible oldest sessions. The current session and active or
+blocked goal sessions are always protected. `session_keep` and
+`session_max_bytes` in `.ikode/config.toml` provide default retention targets;
+over-budget storage warns but is never deleted automatically.
+
+`/fork` clones the active transcript into a fresh saved session and switches to
+that branch; the parent remains untouched and resumable. `/btw <question>` (or
+`/side <question>`) answers from the current conversation in a temporary,
+read-only side chat, then returns automatically. Its messages, tool trace, and
+answer are not appended to the main transcript; bare `/btw` prompts for a question.
+
+`/effort` accepts `auto`, `low`, `med`/`medium`, `high`, `max`, and `ultra`.
+Ultra combines the deepest provider-supported reasoning with proactive delegation;
+other levels delegate only when requested. `/agent spawn <task>` starts an isolated
+read-only worker, `/agents` shows its state, and `/agent steer|wait|stop|close|collect`
+controls the thread. See [effort and subagent controls](docs/EFFORT_AND_AGENTS.md).
+
+## Graph and traditional harness modes
+
+Graph mode remains enabled by default. `/graph off` switches the current session
+to a traditional file/shell harness: graph-backed tools are removed from model
+requests, startup/index sync is disabled, and file changes do not write to the graph
+WAL. `/graph on` reloads the project graph. Add `save` (and optionally `global`) to
+persist either state, or set `graph_enabled = false` in `.ikode/config.toml`.
+
+## Third-party MCP servers
+
+iKode connects to MCP tool servers over both standard transports: local stdio and
+remote Streamable HTTP. Registrations are stored in the git-ignored
+`.ikode/settings.local.json` file and reconnect automatically on startup.
+
+```text
+/mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem .
+/mcp add remote --url https://example.com/mcp --header "Authorization=Bearer ${MCP_TOKEN}"
+/mcp list
+/mcp tools
+/mcp disable filesystem
+/mcp refresh
+/mcp remove filesystem
 ```
 
-### Custom Model
-```bash
-# OpenAI (GPT-4o, GPT-4, o1, etc.)
-ikode --model "openai::gpt-4o"
+Discovered tools are namespaced as `mcp__server__tool`. Every MCP tool is treated
+as externally mutating and permission-gated in agentic mode, withheld in plan mode,
+and still subject to explicit deny rules in yolo mode. See the [MCP integration
+guide](docs/MCP.md) for configuration, environment references, compatibility, and
+the security boundary.
 
-# Anthropic (Claude models)
-ikode --model "anthropic::claude-3-5-sonnet-20241022"
+## Agent tools
 
-# Ollama (local models)
-ikode --model "ollama::llama3"
+iKode exposes normal coding tools, six subagent-orchestration tools, and three
+additional goal-control tools. They cover deterministic retrieval and graph
+traversal, exact file/chunk editing, bounded shell execution, todos, settings,
+project skills, and parallel read-only delegation. See the factual
+[agent tool catalog](docs/IKODE_TOOLS.md) for the complete list and permission model.
 
-# Vertex AI (Gemini models)
-ikode --model "vertexai::gemini-1.5-pro"
+File operations are restricted to the project root. Shell commands default to a
+120-second timeout (maximum 600 seconds) and retain at most 512 KiB each from stdout
+and stderr. Mutating tools are unavailable in plan mode and permission-gated in
+agentic mode.
 
-# AWS Bedrock (Claude, etc.)
-ikode --model "bedrock::anthropic.claude-3-5-sonnet-20241022-v2:0"
-```
+Harness metadata (`config.toml`, local settings, goals, and compacted session
+transcripts) is written through same-directory temporary files and atomically
+replaced. Session appends are synced per JSONL record; an incomplete trailing
+record is recoverable, while malformed complete records are reported instead of
+silently disappearing.
 
-### User Guidelines
-You can provide custom instructions or project context to the agent in two ways:
-1. **`ikode.md`**: If this file exists in your current directory, it will be automatically loaded as project guidelines.
-2. **`--guide` flag**: Specify a custom path to a guidelines file.
-   ```bash
-   ikode --guide docs/internal-standards.md
-   ```
+## Graph durability
 
-## Configuration
+The code graph is backed by a single-writer, checksummed WAL at
+`.ikode/graph.log`. Transactions use explicit transaction/commit frames and are
+synced before success is returned. Torn trailing records are repaired to the last
+commit boundary; checksum damage inside the log stops recovery rather than silently
+dropping data. Existing JSONL logs are read as a legacy prefix and can be extended
+with the framed format.
 
-Set the necessary environment variables for your chosen providers:
+Payloads of 4 KiB or more use LZ4 when compression saves space. Transactions are
+bounded to 64 MiB uncompressed, snapshots to 1 GiB, and 64 MiB of transaction delta
+triggers an exact-state checkpoint before the next write. `/squash` forces the same
+checkpoint manually. See the [WAL format and recovery contract](docs/WAL.md).
 
-```bash
-# OpenAI
-export OPENAI_API_KEY="your-openai-key"
+## Development
 
-# Anthropic
-export ANTHROPIC_API_KEY="your-anthropic-key"
-
-# Ollama (local)
-export OLLAMA_URL="http://localhost:11434"
-
-# Vertex AI
-export VERTEXAI_API_URL="your-vertexai-url"
-export VERTEXAI_SA_PATH="/path/to/service-account.json"
-
-# AWS Bedrock
-export AWS_REGION="us-east-1"
-```
-
-### Options
+The repository contains three Rust build roots because GAISe is a nested workspace
+and LivingVector is a standalone crate:
 
 ```bash
-# Brave mode - skip confirmation prompts (use with caution!)
-ikode --brave
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
 
-# Control history truncation
-ikode --max-history 120        # Max messages per request (default: 80, 0 = unlimited)
-ikode --prefix-keep 6          # Early messages to always keep (default: 4)
+cd modules/gaise
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-targets
+
+cd ../livec_graph
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
 ```
 
-## Contributing
-
-Contributions are welcome! Please see the individual module READMEs for more details on development.
+CI runs these checks on Windows and Linux.
 
 ## License
 
-AGPLv3
+Licensed under the GNU Affero General Public License v3.0 only. See [LICENSE](LICENSE).

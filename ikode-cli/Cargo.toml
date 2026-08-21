@@ -1,8 +1,19 @@
 [package]
-name = "ikode-cli"
+name = "ikode"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.91.1"
+description = "Agentic coding CLI with graph-backed code retrieval and editing"
+license = "AGPL-3.0-only"
+repository = "https://github.com/ikcore/ikode-alpha"
+readme = "../README.md"
+keywords = ["ai", "cli", "coding-agent", "code-search"]
+categories = ["command-line-utilities", "development-tools"]
 default-run = "ikode"
+
+[lib]
+name = "ikode"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ikode"
@@ -10,9 +21,24 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "color"] }
-tokio = { version = "1.0", features = ["full"] }
-gaise-core = { path = "../gaise/gaise-core" }
-gaise-client = { path = "../gaise/gaise-client" }
+tokio = { version = "1", features = ["full"] }
+
+# Local HTTP server behind `/visualize` — serves a static page (no npm/build step)
+# plus JSON APIs over the indexed graph. Rides the tokio runtime already in use.
+axum = "0.7"
+
+# Inference / embeddings (GAISe) — vendored under modules/gaise (nested workspace).
+# The gaise-core package is named "gaise"; its library target is `gaise_core`.
+gaise-core = { path = "../modules/gaise/gaise-core", package = "gaise" }
+gaise-client = { path = "../modules/gaise/gaise-client" }
+
+# In-memory, WAL-backed property graph (LivingVector) — vendored under modules/livec_graph.
+livec_graph = { path = "../modules/livec_graph" }
+
+# Web research (web_search/web_fetch): already in the workspace graph via the
+# gaise providers and rmcp, so this direct dependency adds zero new crates.
+reqwest = { version = "0.13", features = ["json", "query"] }
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures-util = "0.3"
@@ -21,8 +47,33 @@ async-trait = "0.1"
 anyhow = "1.0"
 uuid = { version = "1.0", features = ["v4"] }
 colored = "2.1"
+console = "0.15"
 indicatif = "0.17"
 chrono = "0.4"
+walkdir = "2"
+toml = "0.8"
+toml_edit = "0.22"
+dirs = "5"
+http = "1"
+rmcp = { version = "2.2.0", default-features = false, features = [
+    "client",
+    "reqwest",
+    "transport-child-process",
+    "transport-streamable-http-client-reqwest",
+] }
+
+# Windows-only: read raw console key events so Shift+Tab is distinguishable from
+# Tab (the `console` crate discards the modifier on Windows). Version/features
+# mirror what `console` already pulls in, so no extra resolver work.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
 
 [dev-dependencies]
 tempfile = "3.8"

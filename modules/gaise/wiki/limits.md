@@ -1,0 +1,261 @@
+# Context windows and limits
+
+> Part of the [GAISe wiki](README.md) · [Capabilities](capabilities.md#model-discovery) · [Models](models.md) · [HTTP API](api.md#get-v1modelslimits) · [Rust SDK](sdk.md#model-discovery) · [Reasoning](reasoning.md) · [Embeddings](embeddings.md) · Vendors: [OpenAI](vendor-openai.md) · [Anthropic](vendor-anthropic.md) · [Gemini](vendor-gemini.md) · [Vertex AI](vendor-vertexai.md) · [Bedrock](vendor-bedrock.md) · [Ollama](vendor-ollama.md) · [ElevenLabs](vendor-elevenlabs.md)
+
+Every model's documented context window, output ceiling, and input budget, in one place and in one shape. The figures live as data in [`model-registry.toml`](../gaise-core/model-registry.toml), are typed by [`GaiseModelLimits`](../gaise-core/src/contracts/gaise_model.rs), and are served two ways: [`GET /v1/models/limits`](api.md#get-v1modelslimits) returns this matrix straight from the registry with no credentials, and [`GET /v1/models`](api.md#get-v1models) carries the same `limits` object on every live listing, with provider-reported values taking precedence. The table below is generated and cannot drift from what the API returns. Figures were verified against the vendor model pages on **2026-08-21**.
+
+## Contents
+
+- [The contract](#the-contract)
+- [Where the numbers come from](#where-the-numbers-come-from)
+- [Model × limits matrix](#model--limits-matrix)
+- [Reading the figures](#reading-the-figures)
+- [Keeping this page current](#keeping-this-page-current)
+
+## The contract
+
+[`GaiseModelLimits`](../gaise-core/src/contracts/gaise_model.rs) — every field is optional and **`null` means unknown, never unlimited**:
+
+| Field | Meaning | Provider sources | Registry key |
+|---|---|---|---|
+| `context_window` | Tokens one request can hold. OpenAI, Anthropic, Bedrock, and Ollama document a single window shared by prompt and generation; Google documents an *input* token limit alongside a separate output limit, and that input limit is recorded here. | Anthropic `max_input_tokens`, Gemini `inputTokenLimit`, Ollama `context_length` | `context_window` |
+| `max_output_tokens` | Tokens the model may generate in one response. | Anthropic `max_tokens`, Gemini `outputTokenLimit` | `max_output_tokens` |
+| `max_input_tokens` | An input-side ceiling reported separately from the window: the per-text limit of embedding models, Anthropic's `max_input_tokens`, Gemini's `inputTokenLimit`. | as above | `[models.embedding] max_input_tokens` |
+| `embedding_dimensions` | Default vector length of an embedding model. | Ollama `embedding_length` | `[models.embedding] default_dimensions` |
+| `max_input_characters` | Characters per request for models bounded by characters rather than tokens (text-to-speech). | ElevenLabs `maximum_text_length_per_request` | `max_input_characters` |
+
+The matrix endpoint returns one row per registry entry, [`GaiseModelLimitsEntry`](../gaise-core/src/contracts/gaise_model.rs): the routable `id`, `provider`, `aliases`, `status`, the GAISe `operations`, the limits flattened into the row, and the entry's notes.
+
+```http
+GET /v1/models/limits?provider=anthropic
+```
+
+```json
+{
+  "audited_on": "2026-08-20",
+  "source": "registry",
+  "models": [
+    {
+      "id": "anthropic::claude-opus-5",
+      "provider": "anthropic",
+      "status": "active",
+      "operations": ["instruct", "instruct_stream"],
+      "context_window": 1000000,
+      "max_output_tokens": 128000,
+      "notes": "…"
+    }
+  ]
+}
+```
+
+## Where the numbers come from
+
+1. **The provider's model API, when it reports them.** Anthropic (`GET /v1/models` → `max_input_tokens`, `max_tokens`), Gemini (`models.list` → `inputTokenLimit`, `outputTokenLimit`), Ollama (`/api/show` → `context_length`, behind `include_details`), and ElevenLabs (`maximum_text_length_per_request`) fill `limits` in the adapter ([Anthropic `catalog.rs`](../gaise-provider-anthropic/src/contracts/catalog.rs), [Gemini `catalog.rs`](../gaise-provider-gemini/src/contracts/catalog.rs), [Ollama `catalog.rs`](../gaise-provider-ollama/src/contracts/catalog.rs), [ElevenLabs `models.rs`](../gaise-provider-elevenlabs/src/contracts/models.rs)). These are tagged `provider` in `capabilities.sources`.
+2. **The registry, for everything still unknown.** [`RegistryModel::overlay`](../gaise-core/src/registry.rs) fills each limit field only when the provider left it empty ([`GaiseModelLimits::fill`](../gaise-core/src/contracts/gaise_model.rs)); a provider that reports its own window is always believed. OpenAI, Vertex AI, and Bedrock report no limits at all, so their figures are registry-sourced at runtime.
+3. **Vendor documentation, for the registry itself.** Each figure was read from the official model page linked from the provider's `catalog` URL in the registry header: OpenAI model cards, the Anthropic models overview, Gemini API and Vertex AI per-model pages, Bedrock model cards, the Ollama library's per-tag model info, and the ElevenLabs models page.
+
+## Model × limits matrix
+
+<!-- Generated by `cargo run -p gaise --example limits_matrix`; registry audited 2026-08-20 -->
+
+Figures are the vendor-documented limits recorded in [`model-registry.toml`](../gaise-core/model-registry.toml) (`context_window`, `max_output_tokens`, `max_input_characters`, and the embedding profile's `max_input_tokens` / `default_dimensions`). **Ops**: `I` instruct, `S` instruct_stream, `E` embeddings, `V` speech, `L` live. `—` means the vendor publishes no figure; it never means unlimited. Retired entries keep the last documented values.
+
+### OpenAI
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `gpt-5.6` (`gpt-5.6-sol`) | active | IS | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.6-terra` | active | IS | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.6-luna` | active | IS | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.5` | active | IS | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.5-pro` | active | — | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.4` | active | IS | 1,050,000 | 128,000 | — | — | — |  |
+| `gpt-5.4-mini` | active | IS | 400,000 | 128,000 | — | — | — |  |
+| `gpt-5.4-nano` | active | IS | 400,000 | 128,000 | — | — | — |  |
+| `text-embedding-3-large` | active | E | — | — | 8,192 | 3,072 | — |  |
+| `text-embedding-3-small` | active | E | — | — | 8,192 | 1,536 | — |  |
+| `text-embedding-ada-002` | active | E | — | — | 8,192 | 1,536 | — |  |
+| `gpt-realtime-2.1` | active | L | 128,000 | 32,000 | — | — | — |  |
+| `gpt-realtime-2.1-mini` | active | L | 128,000 | 32,000 | — | — | — |  |
+| `gpt-realtime-2` | active | L | 128,000 | 32,000 | — | — | — |  |
+| `gpt-realtime-1.5` | active | L | 32,000 | 4,096 | — | — | — |  |
+| `gpt-audio-1.5` | active | IS | 128,000 | 16,384 | — | — | — |  |
+| `gpt-image-2` | active | — | — | — | — | — | — |  |
+| `gpt-5-chat-latest` | retired | — | 128,000 | 16,384 | — | — | — |  |
+| `gpt-5.1-chat-latest` | retired | — | 128,000 | 16,384 | — | — | — |  |
+| `gpt-5.2-chat-latest` | retired | — | 128,000 | 16,384 | — | — | — |  |
+| `gpt-5.3-chat-latest` | retired | — | 128,000 | 16,384 | — | — | — |  |
+| `gpt-5-2025-08-07` | deprecated | — | 400,000 | 128,000 | — | — | — |  |
+| `gpt-5-mini-2025-08-07` | deprecated | — | 400,000 | 128,000 | — | — | — |  |
+| `gpt-5-nano-2025-08-07` | deprecated | — | 400,000 | 128,000 | — | — | — |  |
+| `gpt-5-pro-2025-10-06` | deprecated | — | 400,000 | 272,000 | — | — | — |  |
+| `o3-2025-04-16` | deprecated | — | 200,000 | 100,000 | — | — | — |  |
+| `o3-pro-2025-06-10` | deprecated | — | 200,000 | 100,000 | — | — | — |  |
+| `o4-mini` (`o4-mini-2025-04-16`) | deprecated | — | 200,000 | 100,000 | — | — | — |  |
+| `gpt-4.1-nano` (`gpt-4.1-nano-2025-04-14`) | deprecated | — | 1,047,576 | 32,768 | — | — | — |  |
+| `gpt-image-1` | deprecated | — | — | — | — | — | — |  |
+| `gpt-image-1.5` (`gpt-image-1-mini`, `chatgpt-image-latest`) | deprecated | — | — | — | — | — | — |  |
+| `gpt-realtime` (`gpt-4o-realtime`, `gpt-realtime-mini`, `gpt-4o-mini-realtime`) | deprecated | — | 32,000 | 4,096 | — | — | — | Context 32K for gpt-realtime, gpt-realtime-mini, and gpt-4o-realtime; gpt-4o-mini-realtime-preview is 16K. |
+| `gpt-audio` (`gpt-4o-audio`, `gpt-audio-mini`, `gpt-4o-mini-audio`) | deprecated | — | 128,000 | 16,384 | — | — | — |  |
+
+### Anthropic
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `claude-fable-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-mythos-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-opus-5` | active | IS | 1,000,000 | 128,000 | — | — | — | 1M context, 128k max output. |
+| `claude-opus-4-8` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-opus-4-7` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-opus-4-6` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-opus-4-5-20251101` (`claude-opus-4-5`) | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `claude-sonnet-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-sonnet-4-6` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `claude-sonnet-4-5-20250929` (`claude-sonnet-4-5`) | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `claude-haiku-4-5-20251001` (`claude-haiku-4-5`) | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `claude-opus-4-1-20250805` | retired | — | 200,000 | 32,000 | — | — | — |  |
+| `claude-opus-4-20250514` | retired | — | 200,000 | 32,000 | — | — | — |  |
+| `claude-sonnet-4-20250514` | retired | — | 200,000 | 64,000 | — | — | — |  |
+| `claude-mythos-preview` | deprecated | IS | 1,000,000 | 128,000 | — | — | — |  |
+
+### Google Gemini API
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `gemini-3.7-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.6-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.5-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.5-flash-lite` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.1-flash-lite` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.1-pro-preview` | preview | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3-flash-preview` | preview | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.1-flash-live-preview` | preview | L | 131,072 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash-native-audio-preview-12-2025` | preview | L | 131,072 | 8,192 | — | — | — |  |
+| `gemini-3.1-flash-image` | active | IS | 131,072 | 32,768 | — | — | — | Function calling and structured outputs are not supported. |
+| `gemini-3.1-flash-lite-image` | active | IS | 65,536 | 4,096 | — | — | — | Released June 2026; the recommended image model (1K output only). |
+| `gemini-3-pro-image` | active | IS | 65,536 | 32,768 | — | — | — |  |
+| `gemini-embedding-2` (`gemini-embedding-2-preview`) | active | E | — | — | 8,192 | 3,072 | — |  |
+| `gemini-3.1-flash-tts-preview` | preview | — | 8,192 | 16,384 | — | — | — |  |
+| `gemini-2.5-pro` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash-lite` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash-image` | deprecated | — | 65,536 | 32,768 | — | — | — |  |
+| `gemini-embedding-001` | deprecated | E | — | — | 2,048 | 3,072 | — |  |
+| `embedding-2-preview` | retired | — | — | — | — | — | — |  |
+| `gemini-2.0-flash` | retired | — | 1,048,576 | 8,192 | — | — | — |  |
+| `gemini-2.0-flash-lite` | retired | — | 1,048,576 | 8,192 | — | — | — |  |
+| `gemini-2.0-flash-live-001` | retired | — | — | — | — | — | — |  |
+| `gemini-live-2.5-flash-preview` | retired | — | — | — | — | — | — |  |
+
+### Google Vertex AI
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `gemini-3.7-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.6-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.5-flash` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.5-flash-lite` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.1-flash-lite` | active | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3-flash-preview` | preview | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-3.1-flash-image` | active | IS | 131,072 | 32,768 | — | — | — |  |
+| `gemini-3.1-flash-lite-image` | active | IS | 65,536 | 4,096 | — | — | — | Max output 4,096 tokens. |
+| `gemini-3-pro-image` | active | IS | 65,536 | 32,768 | — | — | — | Function calling is not supported; video input is not supported; 4K output remains in preview. |
+| `gemini-embedding-2` (`gemini-embedding-2-preview`) | active | — | — | — | 8,192 | 3,072 | — |  |
+| `gemini-embedding-001` | active | E | — | — | 2,048 | 3,072 | — |  |
+| `text-embedding-005` (`text-embedding-004`, `text-multilingual-embedding-002`) | active | E | — | — | 2,048 | 768 | — |  |
+| `multimodalembedding@001` | active | — | — | — | 32 | 1,408 | — |  |
+| `gemini-live-2.5-flash-native-audio` | active | — | 131,072 | 65,536 | — | — | — | Documented as a 128K context window and 64K output. |
+| `gemini-2.5-pro` | deprecated | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash` | deprecated | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash-lite` | deprecated | IS | 1,048,576 | 65,536 | — | — | — |  |
+| `gemini-2.5-flash-image` | deprecated | IS | 32,768 | 32,768 | — | — | — | Vertex documents a 32,768-token context window for this model; the Gemini API documents 65,536. |
+| `gemini-2.0-flash` (`gemini-2.0-flash-lite`) | retired | — | — | — | — | — | — |  |
+
+### Amazon Bedrock
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `anthropic.claude-opus-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-fable-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-opus-4-8` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-sonnet-5` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-opus-4-7` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-sonnet-4-6` | active | IS | 1,000,000 | 64,000 | — | — | — | Structured outputs supported. The Bedrock model card caps output at 64K where the direct API allows 128K. |
+| `anthropic.claude-opus-4-6-v1` | active | IS | 1,000,000 | 128,000 | — | — | — |  |
+| `anthropic.claude-opus-4-5-20251101-v1:0` | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `anthropic.claude-sonnet-4-5-20250929-v1:0` | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `anthropic.claude-haiku-4-5-20251001-v1:0` | active | IS | 200,000 | 64,000 | — | — | — |  |
+| `anthropic.claude-mythos-5` | active | — | 1,000,000 | 128,000 | — | — | — |  |
+| `amazon.nova-2-lite-v1:0` | active | IS | 1,000,000 | 64,000 | — | — | — | Client-side tool calling supported; structured outputs not supported; the model card lists no reasoning controls. |
+| `amazon.nova-2-sonic-v1:0` | active | — | 1,000,000 | 64,000 | — | — | — |  |
+| `amazon.nova-2-multimodal-embeddings-v1:0` | active | E | — | — | 8,192 | 3,072 | — |  |
+| `amazon.nova-pro-v1:0` | active | IS | 300,000 | 5,000 | — | — | — | Bedrock model card: 300K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). |
+| `amazon.nova-lite-v1:0` | active | IS | 300,000 | 5,000 | — | — | — | Bedrock model card: 300K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). |
+| `amazon.nova-micro-v1:0` | active | IS | 128,000 | 5,000 | — | — | — | Bedrock model card: 128K context, 5K max output (the Nova user guide's spec table says 10K; the request schema caps maxTokens at 5K). |
+| `amazon.nova-*` | active | IS | 128,000 | 5,000 | — | — | — | Context window recorded as the family floor (Nova Micro, 128K); Nova Pro and Lite are 300K and have their own entries. |
+| `amazon.titan-embed-text-v2:0` | active | E | — | — | 8,192 | 1,024 | — | 8,192 tokens / 50,000 characters per text; one text per call; `normalize` is a native flag. |
+| `amazon.titan-embed-text-v1` | active | E | — | — | 8,192 | 1,536 | — |  |
+| `amazon.titan-embed-image-v1` | active | E | — | — | 256 | 1,024 | — |  |
+| `amazon.titan-embed-*` | active | E | — | — | — | — | — |  |
+| `cohere.embed-v4:0` | active | E | — | — | 128,000 | 1,536 | — |  |
+| `cohere.embed-english-v3` (`cohere.embed-multilingual-v3`) | active | E | — | — | 512 | 1,024 | — |  |
+| `cohere.embed-*` | active | E | — | — | — | — | — |  |
+| `anthropic.claude-opus-4-1-20250805-v1:0` | legacy | — | 200,000 | 32,000 | — | — | — |  |
+| `anthropic.claude-sonnet-4-20250514-v1:0` | legacy | — | 200,000 | 64,000 | — | — | — |  |
+| `anthropic.claude-3-haiku-20240307-v1:0` | legacy | — | 200,000 | 4,096 | — | — | — |  |
+| `amazon.nova-premier-v1:0` | legacy | — | 1,000,000 | 25,000 | — | — | — |  |
+| `amazon.nova-sonic-v1:0` | legacy | — | 300,000 | — | — | — | — |  |
+| `amazon.nova-reel-v1:*` | legacy | — | — | — | — | — | — |  |
+| `amazon.nova-canvas-v1:0` | legacy | — | — | — | — | — | — |  |
+| `cohere.command-r-*` | retired | — | 128,000 | 4,096 | — | — | — |  |
+
+### Ollama
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `qwen3:*` | active | IS | 40,960 | — | — | — | — | Context 40,960 on the original dense tags (0.6b-32b); the 2507 builds, 4b, 30b, and 235b are 262,144. Ollama serves a smaller default num_ctx; raise it per request. |
+| `gpt-oss:*` | active | IS | 131,072 | — | — | — | — | Context 131,072 on 20b and 120b. |
+| `deepseek-r1:*` (`deepseek-v3.1:*`) | active | IS | 131,072 | — | — | — | — | Context 131,072 on the distilled tags; deepseek-r1:671b and deepseek-v3.1 are 163,840. |
+| `gemma4:*` | active | IS | 131,072 | — | — | — | — | Context 131,072 on e2b/e4b; 12b, 26b, and 31b are 262,144. |
+| `embeddinggemma:*` | active | E | — | — | 2,048 | 768 | — | EmbeddingGemma 300m; Matryoshka 768/512/256/128; 2,048-token context; Google prompt-instruction convention. |
+| `nomic-embed-text:*` | active | E | — | — | 8,192 | 768 | — | nomic-embed-text v1.5; Matryoshka 64-768; 8,192-token context (raise num_ctx); prefixes are required for good retrieval. |
+| `nomic-embed-text-v2-moe:*` | active | E | — | — | 512 | 768 | — | Multilingual MoE; Matryoshka 256-768; 512-token context. |
+| `qwen3-embedding:*` | active | E | — | — | 32,768 | — | — | 0.6b/4b/8b = 1024/2560/4096 dimensions (Matryoshka 32-4096); 32k context; queries take an instruction. |
+| `mxbai-embed-large:*` | active | E | — | — | 512 | 1,024 | — | mixedbread mxbai-embed-large-v1; fixed 1024; 512-token context; queries take an instruction. |
+| `bge-m3:*` | active | E | — | — | 8,192 | 1,024 | — | BAAI bge-m3; fixed 1024; 8,192-token context; multilingual; no prefix. |
+| `bge-large:*` | active | E | — | — | 512 | 1,024 | — | BAAI bge-large-en-v1.5; fixed 1024; 512-token context; optional query instruction. |
+| `all-minilm:*` | active | E | — | — | 256 | 384 | — | all-MiniLM-L6/L12; fixed 384; 256-token context; English. |
+| `snowflake-arctic-embed:*` | active | E | — | — | 512 | — | — | Arctic-embed v1 22m-335m; 384-1024 dimensions by tag; 512-token context; queries take an instruction. |
+| `snowflake-arctic-embed2:*` | active | E | — | — | 8,192 | 1,024 | — | Arctic-embed 2.0; 1024 dimensions (Matryoshka to 256); 8,192-token context; multilingual; queries take `query: `. |
+| `granite-embedding:*` | active | E | — | — | 512 | — | — | IBM Granite 30m (384, English) / 278m (768, 12 languages); 512-token context; no prefix. |
+| `paraphrase-multilingual:*` | active | E | — | — | 128 | 768 | — | paraphrase-multilingual-MiniLM-L12-v2; fixed 768; 128-token context; 50+ languages. |
+
+### ElevenLabs
+
+| Model | Status | Ops | Context window | Max output | Max input / text | Dimensions | Chars / request | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| `eleven_v3` | active | VL | — | — | — | — | 5,000 | Flagship, 70+ languages, 5,000 characters per request. |
+| `eleven_v3_conversational` | active | L | — | — | — | — | — |  |
+| `eleven_multilingual_v2` | active | VL | — | — | — | — | 10,000 | Default model; 29 languages; 10,000 characters per request. |
+| `eleven_flash_v2_5` | active | VL | — | — | — | — | 40,000 | ~75 ms latency, 32 languages, 40,000 characters per request, accepts language_code. |
+| `eleven_flash_v2` | active | VL | — | — | — | — | 30,000 | English only; 30,000 characters per request. |
+| `eleven_turbo_v2_5` | deprecated | VL | — | — | — | — | 40,000 | Character limit as for the functionally equivalent eleven_flash_v2_5. |
+| `eleven_turbo_v2` | deprecated | VL | — | — | — | — | 30,000 | Character limit as for the functionally equivalent eleven_flash_v2. |
+| `eleven_multilingual_sts_v2` (`eleven_english_sts_v2`) | active | — | — | — | — | — | — |  |
+| `scribe_v2` (`scribe_v2_realtime`) | active | — | — | — | — | — | — |  |
+
+## Reading the figures
+
+- **OpenAI** publishes a shared context window and a max-output figure per model. The GPT-5.4/5.5/5.6 frontier models are 1,050,000; the 5.4 mini/nano and GPT-5 generation are 400,000; `*-chat-latest` aliases are 128,000 / 16,384 regardless of generation; `gpt-5-pro` is the one 272,000-output model. Realtime 2.x jumped to 128,000 / 32,000 from 32,000 / 4,096. Image models publish no token limits.
+- **Anthropic** documents 1M as the *default* window for every 1M model — no beta header and standard pricing — with 128K output; the 4.5 generation is 200K / 64K. The Models API reports both figures live, so at runtime the registry contributes nothing here. Opus 4.1, Opus 4, and Sonnet 4 are retired on the direct API; their rows keep the last documented values.
+- **Gemini API and Vertex AI** document an input limit and a separate output limit. The text families are 1,048,576 / 65,536 on both platforms; image models have small shared text+image ceilings (`gemini-3.1-flash-lite-image` only 4,096 output); `gemini-2.5-flash-image` differs between platforms (65,536 input on the Gemini API, 32,768 on Vertex). Models retired before this audit whose pages no longer exist have no figures.
+- **Bedrock** model cards restate the vendor's window but sometimes cap output differently — Sonnet 4.6 is 64K on Bedrock and 128K direct. Nova v1 cards (5K output for Pro/Lite/Micro, 25K for Premier) disagree with the Nova user guide's 10K spec table; the registry records the card figure, which is also the `maxTokens` ceiling [`resolved_max_tokens`](../gaise-provider-bedrock/src/bedrock_client.rs) enforces. Cross-region inference profiles (`us.`, `global.`, …) resolve to their foundation entry.
+- **Ollama** families are recorded at the smallest tag's trained window with the per-tag variation in the notes (`qwen3` is 40,960 on the dense originals and 262,144 on the 2507 builds). `GET /v1/models?provider=ollama&include_details=true` reports the installed tag's exact `context_length` and overrides the registry. The served window is the request's `num_ctx`, which Ollama defaults well below the trained value.
+- **ElevenLabs** limits are characters per request, not tokens; the `/v1/models` endpoint reports the same figure live. `eleven_v3_conversational` has no published figure.
+
+## Keeping this page current
+
+1. Verify the figure on the vendor page linked from the provider's `catalog` URL in [`model-registry.toml`](../gaise-core/model-registry.toml) and set `context_window` / `max_output_tokens` / `max_input_characters` on the entry (embedding per-text limits go in `[models.embedding] max_input_tokens`).
+2. `cargo test -p gaise` — [`every_driveable_text_model_documents_a_context_window`](../gaise-core/src/registry.rs) fails when an active instruct/live entry has no figure, and [`limits_matrix_lists_every_entry_with_routable_ids`](../gaise-core/src/registry.rs) pins the matrix shape.
+3. Regenerate the matrix above: `cargo run -p gaise --example limits_matrix` and paste the output between the heading and [Reading the figures](#reading-the-figures).
+4. If an adapter gains a new provider-reported limit, set it in the adapter's catalog mapper and extend its JSON-fixture test; the registry only fills what the provider leaves unknown.

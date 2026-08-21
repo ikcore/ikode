@@ -1,0 +1,35 @@
+[package]
+name = "gaise-api"
+description = "Axum HTTP server for GAISe — exposes /v1/instruct, /v1/instruct/stream, and /v1/embeddings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[features]
+default = ["elevenlabs"]
+live = ["gaise-client/live"]
+elevenlabs = ["gaise-client/elevenlabs"]
+
+[dependencies]
+gaise-core.workspace = true
+gaise-client.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures-util.workspace = true
+tokio.workspace = true
+axum = { version = "0.7", features = ["macros", "ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum-extra = "0.9"
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
+http = "1.1"
+mime = "0.3"

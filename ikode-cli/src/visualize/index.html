@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>iKode · visualize</title>
+<!-- D3 for the collapsible left-to-right tree, highlight.js for the code box, and
+     3d-force-graph (bundles three.js) for the 3D relationship graph. All from common
+     public CDNs (no npm / build step). -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1/dist/3d-force-graph.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css" />
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a3340;
+    --text: #d7dde6;
+    --muted: #8b97a7;
+    --accent: #58a6ff;
+    --dir: #e3b341;
+    --file: #58a6ff;
+    --type: #bc8cff;
+    --fn: #56d364;
+    --link: #30363d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--border); flex: 0 0 auto;
+  }
+  header .brand { font-weight: 700; letter-spacing: .3px; }
+  header .brand span { color: var(--accent); }
+  header .stats { color: var(--muted); font-size: 12px; }
+  header .search { margin-left: auto; display: flex; align-items: center; gap: 8px; position: relative; }
+  header input[type=search] {
+    width: 320px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 13px; outline: none;
+  }
+  header input[type=search]:focus { border-color: var(--accent); }
+  header select {
+    padding: 7px 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 12px;
+  }
+  header button {
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--accent); color: #06101f; font-weight: 600; cursor: pointer; font-size: 13px;
+  }
+  header button:hover { filter: brightness(1.08); }
+
+  #results {
+    position: absolute; top: 40px; right: 0; width: 460px; max-height: 60vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 12px 36px rgba(0,0,0,.5); display: none; z-index: 30;
+  }
+  #results .meta { padding: 8px 12px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--border); }
+  #results .row { padding: 9px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  #results .row:last-child { border-bottom: none; }
+  #results .row:hover { background: var(--panel-2); }
+  #results .row .name { font-weight: 600; }
+  #results .row .kind { color: var(--type); font-size: 11px; margin-left: 6px; }
+  #results .row .path { color: var(--muted); font-size: 11px; }
+  #results .row .sum { color: var(--text); opacity: .8; font-size: 12px; margin-top: 2px; }
+  #results .row .score { float: right; color: var(--muted); font-size: 11px; }
+
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #workspace { flex: 1 1 auto; position: relative; overflow: hidden; }
+  #tree { width: 100%; height: 100%; display: block; cursor: grab; }
+  #tree:active { cursor: grabbing; }
+  #graph3d { position: absolute; inset: 0; display: none; }
+  .hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 11px;
+    background: rgba(13,17,23,.7); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+
+  /* Tree ⇄ 3D view toggle */
+  .viewtoggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .viewtoggle button { background: var(--panel-2); color: var(--muted); border: none;
+    padding: 7px 12px; font-size: 12px; cursor: pointer; border-radius: 0; font-weight: 600; }
+  .viewtoggle button.active { background: var(--accent); color: #06101f; }
+  .viewtoggle button:hover:not(.active) { color: var(--text); }
+
+  /* 3D node/link controls (only shown in the graph view) */
+  .graphctl { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+  .graphctl input[type=range] { width: 90px; accent-color: var(--accent); cursor: pointer; }
+  .graphctl .sep { width: 1px; height: 18px; background: var(--border); }
+  .graphctl button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 9px; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .graphctl button.off { color: var(--muted); opacity: .65; }
+  .graphctl button:hover { border-color: var(--accent); }
+
+  .link { fill: none; stroke: var(--link); stroke-width: 1.5px; }
+  .node circle { stroke-width: 2px; cursor: pointer; }
+  .node text { fill: var(--text); font-size: 12px; cursor: pointer; paint-order: stroke;
+    stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+  .node.selected text { fill: #fff; font-weight: 700; }
+  .node.selected circle { stroke: #fff; }
+
+  /* Code box drawer */
+  #drawer {
+    flex: 0 0 0; width: 0; overflow: hidden; background: var(--panel);
+    border-left: 1px solid var(--border); display: flex; flex-direction: column;
+    transition: width .18s ease, flex-basis .18s ease;
+  }
+  #drawer.open { flex-basis: 46%; width: 46%; }
+  #drawer .head { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  #drawer .head .title { font-size: 15px; font-weight: 700; }
+  #drawer .head .kind { color: var(--type); font-size: 12px; margin-left: 6px; }
+  #drawer .head .loc { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-all; }
+  #drawer .head .sum { margin-top: 8px; font-size: 13px; line-height: 1.4; color: #c7d2e0; }
+  #drawer .head .close { float: right; cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; }
+  #drawer .head .close:hover { color: var(--text); }
+  #drawer pre { margin: 0; flex: 1 1 auto; overflow: auto; }
+  #drawer pre code { display: block; padding: 14px; font-size: 12.5px; line-height: 1.5;
+    font-family: ui-monospace, "Cascadia Code", "Fira Code", Consolas, monospace; background: var(--bg); }
+
+  .legend { display: flex; gap: 14px; align-items: center; }
+  .legend span { font-size: 11px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">i<span>K</span>ode · visualize</div>
+    <div class="stats" id="stats">loading…</div>
+    <div class="legend">
+      <span><i style="background:var(--dir)"></i>dir</span>
+      <span><i style="background:var(--file)"></i>file</span>
+      <span><i style="background:var(--type)"></i>type</span>
+      <span><i style="background:var(--fn)"></i>fn</span>
+    </div>
+    <div class="viewtoggle" id="viewtoggle">
+      <button data-view="tree" class="active">Tree</button>
+      <button data-view="graph">3D Graph</button>
+    </div>
+    <div class="graphctl" id="graphctl" style="display:none">
+      <label for="nodeSize">node size</label>
+      <input type="range" id="nodeSize" min="0.1" max="4" step="0.1" value="0.8" title="Node size" />
+      <span class="sep"></span>
+      <label for="linkOpacity">links</label>
+      <input type="range" id="linkOpacity" min="0" max="1" step="0.05" value="0.45" title="Link opacity — drag down to thin them out" />
+      <button id="linksToggle" title="Show / hide all links">on</button>
+      <span class="sep"></span>
+      <label>files/dirs</label>
+      <button id="containersToggle" title="Show / hide file & directory nodes">on</button>
+    </div>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search code (semantic + keyword)…" autocomplete="off" />
+      <select id="mode" title="Search mode">
+        <option value="auto">Auto</option>
+        <option value="semantic">Semantic</option>
+        <option value="keyword">Keyword</option>
+      </select>
+      <button id="go">Search</button>
+      <div id="results"></div>
+    </div>
+  </header>
+  <main>
+    <div id="workspace">
+      <svg id="tree"></svg>
+      <div id="graph3d"></div>
+      <div class="hint" id="hintTree">scroll to zoom · drag to pan · click a node to expand · click a symbol to view its code</div>
+      <div class="hint" id="hintGraph" style="display:none">drag to orbit · scroll to zoom · click a node to view its code · loading…</div>
+    </div>
+    <div id="drawer">
+      <div class="head">
+        <span class="close" id="drawerClose" title="Close">✕</span>
+        <span class="title" id="dTitle"></span><span class="kind" id="dKind"></span>
+        <div class="loc" id="dLoc"></div>
+        <div class="sum" id="dSum"></div>
+      </div>
+      <pre><code id="dCode" class="hljs"></code></pre>
+    </div>
+  </main>
+</div>
+
+<script>
+const KIND_COLOR = (kind) => {
+  if (kind === "Directory") return getCss("--dir");
+  if (kind === "File") return getCss("--file");
+  if (["Function", "Method"].includes(kind)) return getCss("--fn");
+  return getCss("--type"); // Struct/Enum/Class/Trait/Interface/etc.
+};
+function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const isChunk = (kind) => !["Directory", "File"].includes(kind);
+
+const svg = d3.select("#tree");
+const svgEl = svg.node();
+const gZoom = svg.append("g");
+const gLink = gZoom.append("g").attr("fill", "none");
+const gNode = gZoom.append("g");
+
+const dx = 24;     // vertical gap between sibling nodes
+const dy = 240;    // horizontal gap between depths (left → right)
+const tree = d3.tree().nodeSize([dx, dy]);
+const diagonal = d3.linkHorizontal().x(d => d.y).y(d => d.x);
+
+let root, counter = 0;
+let selectedId = null;
+
+const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on("zoom", (e) => gZoom.attr("transform", e.transform));
+svg.call(zoom);
+
+function size(){ return { w: svgEl.clientWidth, h: svgEl.clientHeight }; }
+
+function load(){
+  fetch("/api/tree").then(r => r.json()).then(data => {
+    root = d3.hierarchy(data);
+    root.x0 = 0; root.y0 = 0;
+    root.descendants().forEach(d => {
+      d.id = ++counter;
+      d._children = d.children;
+      if (d.depth >= 1) d.children = null; // start collapsed below the root
+    });
+    update(root);
+    // Initial framing: a left margin + vertical centring of the root.
+    const { h } = size();
+    svg.call(zoom.transform, d3.zoomIdentity.translate(90, h / 2).scale(0.85));
+  });
+  fetch("/api/stats").then(r => r.json()).then(s => {
+    document.getElementById("stats").textContent =
+      `${s.root} — ${s.files} files · ${s.chunks} symbols · ${s.semantic ? "semantic+keyword" : "keyword only"}`;
+  });
+}
+
+function childrenOf(d){ return d.children || d._children || []; }
+
+function onClick(event, d){
+  if (d._children || d.children) {            // expandable → toggle
+    d.children = d.children ? null : d._children;
+    update(d);
+  }
+  if (isChunk(d.data.kind)) openChunk(d.data.id);
+  selectNode(d);
+}
+
+function selectNode(d){
+  selectedId = d.data.id;
+  gNode.selectAll("g.node").classed("selected", n => n.data.id === selectedId);
+}
+
+function update(source){
+  const duration = 280;
+  tree(root);
+  const nodes = root.descendants();
+  const links = root.links();
+
+  const node = gNode.selectAll("g.node").data(nodes, d => d.id);
+
+  const nodeEnter = node.enter().append("g")
+    .attr("class", "node")
+    .attr("transform", `translate(${source.y0},${source.x0})`)
+    .on("click", onClick);
+
+  nodeEnter.append("circle").attr("r", 1e-6);
+  nodeEnter.append("text")
+    .attr("dy", "0.32em")
+    .attr("x", 12)
+    .attr("text-anchor", "start")
+    .text(d => label(d))
+    .append("title").text(d => d.data.summary || d.data.id);
+
+  const nodeUpdate = nodeEnter.merge(node);
+  nodeUpdate.transition().duration(duration)
+    .attr("transform", d => `translate(${d.y},${d.x})`);
+  nodeUpdate.select("circle")
+    .attr("r", d => d.depth === 0 ? 7 : 5)
+    .style("fill", d => (d._children && !d.children) ? KIND_COLOR(d.data.kind) : "var(--bg)")
+    .style("stroke", d => KIND_COLOR(d.data.kind));
+  nodeUpdate.classed("selected", d => d.data.id === selectedId);
+
+  const nodeExit = node.exit().transition().duration(duration)
+    .attr("transform", `translate(${source.y},${source.x})`).remove();
+  nodeExit.select("circle").attr("r", 1e-6);
+  nodeExit.select("text").style("fill-opacity", 1e-6);
+
+  const link = gLink.selectAll("path.link").data(links, d => d.target.id);
+  const linkEnter = link.enter().insert("path", "g")
+    .attr("class", "link")
+    .attr("d", () => { const o = { x: source.x0, y: source.y0 }; return diagonal({ source: o, target: o }); });
+  linkEnter.merge(link).transition().duration(duration).attr("d", diagonal);
+  link.exit().transition().duration(duration)
+    .attr("d", () => { const o = { x: source.x, y: source.y }; return diagonal({ source: o, target: o }); })
+    .remove();
+
+  nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+}
+
+function label(d){
+  let n = d.data.name || "";
+  if (d.data.lines) n += ` :${d.data.lines[0]}`;
+  return n.length > 40 ? n.slice(0, 39) + "…" : n;
+}
+
+// ----- search ------------------------------------------------------------------
+const resultsEl = document.getElementById("results");
+function runSearch(){
+  const q = document.getElementById("q").value.trim();
+  const mode = document.getElementById("mode").value;
+  if (!q){ resultsEl.style.display = "none"; return; }
+  resultsEl.style.display = "block";
+  resultsEl.innerHTML = `<div class="meta">searching…</div>`;
+  fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${mode}`)
+    .then(r => r.json())
+    .then(res => renderResults(res))
+    .catch(e => { resultsEl.innerHTML = `<div class="meta">error: ${e}</div>`; });
+}
+
+function renderResults(res){
+  const parts = [];
+  const meta = `${res.hits.length} hits · ${res.mode}${res.note ? " — " + esc(res.note) : ""}`;
+  parts.push(`<div class="meta">${meta}</div>`);
+  if (!res.hits.length) parts.push(`<div class="row">no matches</div>`);
+  for (const h of res.hits){
+    parts.push(
+      `<div class="row" data-id="${esc(h.id)}">` +
+        `<span class="score">${h.score.toFixed(2)}</span>` +
+        `<span class="name">${esc(h.name)}</span><span class="kind">${esc(h.kind)}</span>` +
+        `<div class="path">${esc(h.path)}:${h.lines[0]}</div>` +
+        (h.summary ? `<div class="sum">${esc(h.summary)}</div>` : "") +
+      `</div>`
+    );
+  }
+  resultsEl.innerHTML = parts.join("");
+  resultsEl.querySelectorAll(".row[data-id]").forEach(row => {
+    row.addEventListener("click", () => {
+      const id = row.getAttribute("data-id");
+      reveal(id);
+      openChunk(id);
+      resultsEl.style.display = "none";
+    });
+  });
+}
+
+// Reveal a node from a search hit. In the tree view, expand every ancestor and centre
+// on it; in the 3D view, fly the camera to it. View-aware so search works in both.
+function reveal(id){
+  if (view === "graph"){ revealGraph(id); return; }
+  const path = findPath(root, id);
+  if (!path) return;
+  for (const d of path){ if (d._children) d.children = d._children; }
+  update(root);
+  const target = path[path.length - 1];
+  selectNode(target);
+  centerNode(target);
+}
+
+function findPath(node, id){
+  const stack = [];
+  function dfs(d){
+    stack.push(d);
+    if (d.data.id === id) return true;
+    for (const c of childrenOf(d)) if (dfs(c)) return true;
+    stack.pop();
+    return false;
+  }
+  return dfs(node) ? stack.slice() : null;
+}
+
+function centerNode(d){
+  const { w, h } = size();
+  const t = d3.zoomTransform(svgEl);
+  const k = t.k;
+  const x = -d.y * k + w * 0.35;
+  const y = -d.x * k + h / 2;
+  svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(k));
+}
+
+// ----- code box ----------------------------------------------------------------
+function openChunk(id){
+  fetch(`/api/chunk?id=${encodeURIComponent(id)}`).then(r => {
+    if (!r.ok) throw new Error("not found");
+    return r.json();
+  }).then(d => {
+    document.getElementById("dTitle").textContent = d.name;
+    document.getElementById("dKind").textContent = d.kind;
+    document.getElementById("dLoc").textContent = `${d.path}:${d.line_start}-${d.line_end}`;
+    document.getElementById("dSum").textContent = d.summary || "";
+    const codeEl = document.getElementById("dCode");
+    codeEl.textContent = d.code;
+    codeEl.removeAttribute("data-highlighted");
+    codeEl.className = "hljs language-" + langOf(d.path);
+    try { hljs.highlightElement(codeEl); } catch (e) {}
+    document.getElementById("drawer").classList.add("open");
+  }).catch(() => {});
+}
+
+function langOf(path){
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  const map = { rs:"rust", ts:"typescript", tsx:"typescript", js:"javascript", jsx:"javascript",
+    py:"python", go:"go", java:"java", cs:"csharp", cpp:"cpp", cc:"cpp", c:"c", h:"cpp",
+    rb:"ruby", php:"php", swift:"swift", kt:"kotlin", scala:"scala", sh:"bash", sql:"sql",
+    md:"markdown", json:"json", toml:"ini", yaml:"yaml", yml:"yaml", html:"xml", css:"css" };
+  return map[ext] || "plaintext";
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => (
+  { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c])); }
+
+// ----- 3D relationship graph ----------------------------------------------------
+// The server lays the graph out in higher-dim space (force-directed) and projects to
+// 3D (PCA). We pin nodes to those coordinates (fx/fy/fz, no re-simulation) so the view
+// faithfully shows that higher-dim clustering — connected symbols clump, isolated ones
+// settle on the surrounding sphere. Manual orbit/zoom; click a node for its code.
+let view = "tree";
+let g3d = null, graphLoaded = false, selectedGraphIdx = null;
+
+function graphEl(){ return document.getElementById("graph3d"); }
+
+// Node size starts small (0.8 = 1/5 of the old default of 4) and is driven live by the
+// header slider; radius in 3d-force-graph scales linearly with nodeRelSize.
+function currentNodeSize(){ return parseFloat(document.getElementById("nodeSize").value) || 0.8; }
+// Link opacity slider (0 is valid → fully thinned out), plus a hard show/hide toggle.
+function currentLinkOpacity(){ return parseFloat(document.getElementById("linkOpacity").value); }
+let linksVisible = true;
+// File/Directory container nodes (and their CONTAINS/DEFINES edges) can be toggled off
+// to recover the pure symbol-relationship view.
+let containersVisible = true;
+const isContainerKind = (k) => k === "File" || k === "Directory";
+const isContainmentLabel = (l) => l === "CONTAINS" || l === "DEFINES";
+
+const nodeColorFn = (n) => (n.idx === selectedGraphIdx) ? "#ffffff" : KIND_COLOR(n.kind);
+
+function ensureGraph(){
+  if (g3d || typeof ForceGraph3D === "undefined") return;
+  const el = graphEl();
+  g3d = ForceGraph3D()(el)
+    .backgroundColor(getCss("--bg"))
+    .nodeId("idx")
+    .nodeColor(nodeColorFn)
+    .nodeOpacity(0.92)
+    .nodeVal(n => 1 + Math.sqrt(n.degree || 0))
+    .nodeRelSize(currentNodeSize())
+    .nodeLabel(n => `<div style="font:12px sans-serif;color:#d7dde6">` +
+      `<b>${esc(n.name)}</b> <span style="color:#bc8cff">${esc(n.kind)}</span><br>` +
+      `<span style="color:#8b97a7">${esc(n.path)}${n.lines[0] ? ":"+n.lines[0] : ""} · ${n.degree} link${n.degree===1?"":"s"}</span></div>`)
+    // Containment edges (CONTAINS/DEFINES) are drawn dimmer than semantic relationships.
+    .linkColor(l => isContainmentLabel(l.label) ? "#262c36" : getCss("--link"))
+    .linkOpacity(currentLinkOpacity())
+    .linkWidth(0.6)
+    .linkVisibility(l => linksVisible && (containersVisible || !isContainmentLabel(l.label)))
+    .nodeVisibility(n => containersVisible || !isContainerKind(n.kind))
+    .onNodeClick(n => { selectGraphNode(n); if (!isContainerKind(n.kind)) openChunk(n.id); focusNode(n); })
+    .onBackgroundClick(() => deselect())
+    .cooldownTicks(0)        // positions are fixed (fx/fy/fz) — don't re-simulate
+    .warmupTicks(0);
+}
+
+function loadGraph(){
+  ensureGraph();
+  if (!g3d){ document.getElementById("hintGraph").textContent = "3D library failed to load (offline?)"; return; }
+  fitGraphSize();
+  if (graphLoaded) return;
+  graphLoaded = true;
+  document.getElementById("hintGraph").textContent = "laying out higher-dim space…";
+  fetch("/api/graph").then(r => r.json()).then(data => {
+    data.nodes.forEach((n, i) => { n.idx = i; n.fx = n.x; n.fy = n.y; n.fz = n.z; });
+    g3d.graphData({ nodes: data.nodes, links: data.edges });
+    const trunc = data.truncated ? ` · showing top ${data.nodes.length} by connectivity (${data.truncated} hidden)` : "";
+    document.getElementById("hintGraph").textContent =
+      `${data.nodes.length} nodes · ${data.edges.length} edges · ${data.dims}-D layout${trunc} — drag to orbit, scroll to zoom, click a node · toggle files/dirs in the header`;
+    // Frame the whole cloud.
+    setTimeout(() => { if (g3d.zoomToFit) g3d.zoomToFit(600, 60); }, 80);
+  }).catch(e => {
+    graphLoaded = false;
+    document.getElementById("hintGraph").textContent = "could not load graph: " + e;
+  });
+}
+
+function selectGraphNode(n){
+  selectedGraphIdx = n.idx;
+  if (g3d) g3d.nodeColor(nodeColorFn); // re-applies the accessor → recolours
+}
+
+// Clear any selection (tree + graph highlight) and dismiss the code box. Wired to a
+// click on empty background in either view.
+function deselect(){
+  selectedId = null;
+  if (gNode) gNode.selectAll("g.node").classed("selected", false);
+  if (selectedGraphIdx !== null){
+    selectedGraphIdx = null;
+    if (g3d) g3d.nodeColor(nodeColorFn);
+  }
+  document.getElementById("drawer").classList.remove("open");
+}
+
+// Re-apply the link + container controls to the live graph.
+function applyGraphStyles(){
+  if (!g3d) return;
+  g3d.nodeVisibility(n => containersVisible || !isContainerKind(n.kind))
+     .linkVisibility(l => linksVisible && (containersVisible || !isContainmentLabel(l.label)))
+     .linkOpacity(currentLinkOpacity());
+}
+
+// Fly the camera to sit a little way out from node `n`, looking at it.
+function focusNode(n){
+  if (!g3d) return;
+  const r = Math.hypot(n.x, n.y, n.z) || 1;
+  const ratio = 1 + 90 / r;
+  g3d.cameraPosition({ x: n.x * ratio, y: n.y * ratio, z: n.z * ratio }, n, 800);
+}
+
+// Reveal a node in the 3D view: load if needed, then select + fly to it.
+function revealGraph(id){
+  const go = () => {
+    const data = g3d.graphData();
+    const n = data.nodes.find(nd => nd.id === id);
+    if (n){ selectGraphNode(n); focusNode(n); }
+  };
+  if (!graphLoaded){ loadGraph(); setTimeout(go, 400); } else { go(); }
+}
+
+function fitGraphSize(){
+  if (!g3d) return;
+  const el = graphEl();
+  g3d.width(el.clientWidth).height(el.clientHeight);
+}
+
+// ----- view switching -----------------------------------------------------------
+function setView(v){
+  view = v;
+  const treeOn = v === "tree";
+  document.getElementById("tree").style.display = treeOn ? "block" : "none";
+  graphEl().style.display = treeOn ? "none" : "block";
+  document.getElementById("hintTree").style.display = treeOn ? "block" : "none";
+  document.getElementById("hintGraph").style.display = treeOn ? "none" : "block";
+  document.getElementById("graphctl").style.display = treeOn ? "none" : "flex";
+  document.querySelectorAll("#viewtoggle button").forEach(b =>
+    b.classList.toggle("active", b.getAttribute("data-view") === v));
+  if (!treeOn) loadGraph();
+}
+
+// ----- wiring ------------------------------------------------------------------
+document.getElementById("go").addEventListener("click", runSearch);
+document.getElementById("q").addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+document.getElementById("drawerClose").addEventListener("click", () =>
+  document.getElementById("drawer").classList.remove("open"));
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search")) resultsEl.style.display = "none";
+});
+document.querySelectorAll("#viewtoggle button").forEach(b =>
+  b.addEventListener("click", () => setView(b.getAttribute("data-view"))));
+document.getElementById("nodeSize").addEventListener("input", () => {
+  if (g3d) g3d.nodeRelSize(currentNodeSize());
+});
+document.getElementById("linkOpacity").addEventListener("input", applyGraphStyles);
+document.getElementById("linksToggle").addEventListener("click", () => {
+  linksVisible = !linksVisible;
+  const btn = document.getElementById("linksToggle");
+  btn.textContent = linksVisible ? "on" : "off";
+  btn.classList.toggle("off", !linksVisible);
+  applyGraphStyles();
+});
+document.getElementById("containersToggle").addEventListener("click", () => {
+  containersVisible = !containersVisible;
+  const btn = document.getElementById("containersToggle");
+  btn.textContent = containersVisible ? "on" : "off";
+  btn.classList.toggle("off", !containersVisible);
+  applyGraphStyles();
+});
+// Click empty tree background (the bare <svg>, not a node) to clear the selection.
+svg.on("click", (e) => { if (e.target === svgEl) deselect(); });
+window.addEventListener("resize", () => { if (root) update(root); fitGraphSize(); });
+
+load();
+</script>
+</body>
+</html>
